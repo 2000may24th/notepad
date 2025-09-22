@@ -48,8 +48,8 @@
     .github-icon{width:20px;height:20px;vertical-align:middle}
     .drop-target{outline:2px dashed var(--accent)}
 
-    /* 3. 오류 수정: 다크모드 활성 항목 배경색 명암비 강화 */
-    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4a5568}
+    /* 2. 오류 수정: 다크모드 활성 항목을 더 밝은 색으로 변경 */
+    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4d4d4d}
     
     body.dark{background:var(--bg);color:#efefef}
     body.dark nav{background:var(--sidebar);border-color:#4a4a4a}
@@ -65,11 +65,11 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.0.9.</h2>
+        <h2>Web Notepad</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">⬅</button>
-          <button class="small" id="btnNewFile">+파일</button>
-          <button class="small" id="btnNewFolder">+폴더</button>
+          <button class="small" id="btnNewFile">+ 파일</button>
+          <button class="small" id="btnNewFolder">+ 폴더</button>
         </div>
       </header>
 
@@ -153,35 +153,32 @@ function allowDrop(e){ e.preventDefault(); e.currentTarget.classList.add('drop-t
 function onContainerDragLeave(e) { e.currentTarget.classList.remove('drop-target'); }
 function onDragStart(ev, id, type){ dragId = id; dragType = type; ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
 
+// 1. 오류 수정: 드래그 상태를 정리하는 중앙 함수
+function cleanupDragState() {
+    document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+    dragId = null;
+    dragType = null;
+}
+
 function onDrop(ev, targetId) {
     ev.preventDefault();
     ev.stopPropagation();
-    const targetElement = ev.currentTarget;
-    const targetIsFolder = targetElement.classList.contains('folder');
-
-    // 파일 -> 파일 위로 드롭 (순서 변경 또는 폴더에서 꺼내기)
+    const targetIsFolder = ev.currentTarget.classList.contains('folder');
     if (dragType === 'file' && !targetIsFolder) {
         const file = db.files[dragId];
-        if (file.folder) {
-            file.folder = null; // 폴더에서 꺼냄
-        }
+        if (file.folder) file.folder = null;
         reorderFile(dragId, targetId);
-    } 
-    // 폴더 -> 폴더 위로 드롭 (순서 변경)
-    else if (dragType === 'folder' && targetIsFolder) {
+    } else if (dragType === 'folder' && targetIsFolder) {
         reorderFolder(dragId, targetId);
     }
     render();
 }
 function onFileContainerDrop(ev) {
     ev.preventDefault();
-    // 4. 오류 수정: 폴더에 있는 파일도 루트로 옮길 수 있도록 수정
     if (dragType === 'file') {
         const file = db.files[dragId];
-        if (file.folder) {
-            file.folder = null; // 폴더에서 꺼냄
-        }
-        reorderFile(dragId, null); // 맨 뒤로 이동
+        if (file.folder) file.folder = null;
+        reorderFile(dragId, null);
         render();
     }
 }
@@ -198,7 +195,7 @@ function onFolderDrop(ev, folderId){
     if(dragType==='file' && dragId && db.files[dragId]){
         db.files[dragId].folder = folderId;
         db.files[dragId].updated = Date.now();
-        db.order = db.order.filter(id => id !== dragId); // 루트 목록에서 제거
+        db.order = db.order.filter(id => id !== dragId);
         saveDB();
         render();
     }
@@ -256,7 +253,6 @@ function renderFolders(){
             fi.className='file-item draggable'; fi.dataset.id = file.id;
             if(file.id === currentFileId) { fi.classList.add('active-file'); }
             fi.innerHTML = renderFileItem(file);
-            // 1. 오류 수정: 체크박스 클릭 시 파일 열기 방지
             fi.onclick = (e) => { if(e.target.type !== 'checkbox') openFile(file.id); };
             fi.draggable=true;
             fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file');
@@ -281,7 +277,6 @@ function renderFiles(){
     div.className='file-item draggable'; div.dataset.id = f.id;
     if(f.id === currentFileId) { div.classList.add('active-file'); }
     div.innerHTML = renderFileItem(f);
-    // 1. 오류 수정: 체크박스 클릭 시 파일 열기 방지
     div.onclick = (e) => { if(e.target.type !== 'checkbox') openFile(f.id); };
     div.draggable = true;
     div.ondragstart = (ev)=>onDragStart(ev, f.id, 'file');
@@ -329,12 +324,8 @@ function updateBookmarkButtonState() { const btn = document.getElementById('btnB
 function doCmd(cmd, val=null){ document.execCommand(cmd, false, val); }
 let dark=false; function applyDark(d){ dark = !!d; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); localStorage.setItem('wn_dark', dark? '1':'0'); }
 
-// 2. 오류 수정: 드래그 종료 시 점선 테두리를 확실하게 제거
-document.addEventListener('dragend', () => {
-  document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
-  dragId = null;
-  dragType = null;
-});
+// 1. 오류 수정: 드래그 종료 시 점선 테두리를 확실하게 제거하는 이벤트 리스너
+window.addEventListener('dragend', cleanupDragState);
 
 if(localStorage.getItem('wn_dark')==='1') applyDark(true);
 if(db.order && db.order.length > 0 && db.files[db.order[0]]) { openFile(db.order[0]); } 
