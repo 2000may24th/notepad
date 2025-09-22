@@ -27,31 +27,9 @@
     .folder{background:linear-gradient(90deg,#fdfdfd,#fbfcff);border:1px solid #eee}
     .file-item{background:#fff;border:1px solid #f0f3f7}
     .file-item.draggable{cursor:grab}
-    
-    /* 1. 변경: 파일 메타 정보 UI 수정 (세로 정렬) */
-    .file-item .meta{
-        flex:1;
-        overflow:hidden;
-        display: flex;
-        flex-direction: column; /* 세로 정렬 */
-        align-items: flex-start; /* 좌측 정렬 */
-        gap: 2px;
-    }
-    .file-item .meta .name{
-        font-weight:600;
-        white-space:nowrap;
-        text-overflow:ellipsis;
-        overflow:hidden;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        width: 100%;
-    }
-    .file-item .meta .sub{
-        font-size:11px; /* 글씨 크기 축소 */
-        color:var(--muted);
-        padding-left: 2px;
-    }
+    .file-item .meta{flex:1;overflow:hidden;display: flex;flex-direction: column;align-items: flex-start;gap: 2px;}
+    .file-item .meta .name{font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;display: flex;align-items: center;gap: 4px;width: 100%;}
+    .file-item .meta .sub{font-size:11px;color:var(--muted);padding-left: 2px;}
     .file-item .actions{display:flex;gap:6px;margin-left:8px}
     .folder.active-file, .file-item.active-file { background-color: var(--active-bg); }
     main{display:flex;flex-direction:column;gap:8px;padding:12px;overflow:hidden}
@@ -68,7 +46,7 @@
     body.dark #statsFooter { border-color: #4a4a4a; color: var(--muted); }
     body.dark #statsFooter span { color: #ddd; }
     .github-icon{width:20px;height:20px;vertical-align:middle}
-    .drop-target{outline:2px dashed var(--accent)} /* 드롭 타겟 강조 */
+    .drop-target{outline:2px dashed var(--accent)}
     .folder-children{margin-left:12px;margin-top:6px}
     :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4a4a4a}
     body.dark{background:var(--bg);color:#efefef}
@@ -85,7 +63,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Web Notepad</h2>
+        <h2>메모 v1.0.7</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">⬅</button>
           <button class="small" id="btnNewFile">+ 파일</button>
@@ -171,16 +149,12 @@ let dragId = null, dragType = null;
 function allowDrop(e){ e.preventDefault(); e.currentTarget.classList.add('drop-target'); }
 function onContainerDragLeave(e) { e.currentTarget.classList.remove('drop-target'); }
 function onDragStart(ev, id, type){ dragId = id; dragType = type; ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
-
-// 2. 변경: 드래그 앤 드롭 정렬 함수들
 function onDrop(ev, targetId) {
     ev.preventDefault();
-    ev.stopPropagation(); // 이벤트 버블링 방지
+    ev.stopPropagation();
     const targetElement = ev.currentTarget;
     targetElement.classList.remove('drop-target');
-
-    if (dragType === 'file' && db.files[dragId].folder) { // 폴더 내 파일 재정렬은 아직 미지원
-        // 여기에 폴더 내 파일 재정렬 로직 추가 가능
+    if (dragType === 'file' && db.files[dragId].folder) {
     } else if (dragType === 'file') {
         reorderFile(dragId, targetId);
     } else if (dragType === 'folder') {
@@ -190,8 +164,6 @@ function onDrop(ev, targetId) {
     dragType = null;
     render();
 }
-
-// 파일 컨테이너(루트)에 드롭 시 맨 뒤로 이동
 function onFileContainerDrop(ev) {
     ev.preventDefault();
     ev.currentTarget.classList.remove('drop-target');
@@ -202,7 +174,6 @@ function onFileContainerDrop(ev) {
         render();
     }
 }
-// 폴더 컨테이너에 드롭 시 맨 뒤로 이동
 function onFolderContainerDrop(ev) {
     ev.preventDefault();
     ev.currentTarget.classList.remove('drop-target');
@@ -213,8 +184,6 @@ function onFolderContainerDrop(ev) {
         render();
     }
 }
-
-
 function onFolderDrop(ev, folderId){ 
     ev.preventDefault();
     ev.stopPropagation();
@@ -222,7 +191,6 @@ function onFolderDrop(ev, folderId){
     if(dragType==='file'){
         db.files[dragId].folder = folderId;
         db.files[dragId].updated = Date.now();
-        // 루트 목록에서 제거
         db.order = db.order.filter(id => id !== dragId);
         saveDB();
         render();
@@ -230,24 +198,22 @@ function onFolderDrop(ev, folderId){
     dragId = null;
     dragType = null;
 }
-
 function reorderFile(dragIdLocal, targetId){
   const idx = db.order.indexOf(dragIdLocal); if(idx>-1) db.order.splice(idx,1);
   if(targetId){ const ti = db.order.indexOf(targetId); db.order.splice(ti,0,dragIdLocal); }
-  else { db.order.push(dragIdLocal); } // targetId 없으면 맨 뒤로
+  else { db.order.push(dragIdLocal); }
   saveDB();
 }
 function reorderFolder(dragIdLocal, targetId){
   const arr = db.folderOrder; const idx = arr.indexOf(dragIdLocal); if(idx>-1) arr.splice(idx,1);
   if(targetId){ const ti = arr.indexOf(targetId); arr.splice(ti,0,dragIdLocal); }
-  else { arr.push(dragIdLocal); } // targetId 없으면 맨 뒤로
+  else { arr.push(dragIdLocal); }
   db.folderOrder = arr;
   saveDB();
 }
 
 function render(){ renderFolders(); renderFiles(); updateBookmarkButtonState(); }
 
-// 1. 변경: 파일 아이템 렌더링 함수 UI 수정
 function renderFileItem(file) {
     const starIcon = file.star ? '⭐' : '';
     return `<div class="meta">
@@ -259,16 +225,24 @@ function renderFileItem(file) {
             </div>`;
 }
 
+// ### 1. & 2. 오류 수정: 이 함수 내부의 로직을 수정했습니다. ###
 function renderFolders(){
-  const cont = document.getElementById('folders'); cont.innerHTML='';
+  const cont = document.getElementById('folders');
+  cont.innerHTML='';
   const order = db.folderOrder || [];
   const currentFile = db.files[currentFileId];
 
-  order.forEach(fid=>{ const f = db.folders[fid]; if(!f) return; const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id;
+  order.forEach(fid=>{
+    const f = db.folders[fid];
+    if(!f) return;
+
+    // 폴더 엘리먼트 생성
+    const el = document.createElement('div');
+    el.className='folder';
+    el.draggable = true;
+    el.dataset.id = f.id;
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')">▸</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">📁 ${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
-    
-    // 2. 변경: 드래그 앤 드롭 이벤트 핸들러 수정
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder');
     el.ondragover = allowDrop;
     el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target');
@@ -277,18 +251,37 @@ function renderFolders(){
         else onDrop(ev, f.id);
     };
 
-    const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
-    Object.values(db.files).forEach(file=>{ if(file.folder===f.id){ const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id;
-      if(file.id === currentFileId) { fi.classList.add('active-file'); }
-      fi.innerHTML = renderFileItem(file);
-      fi.onclick = ()=>openFile(file.id); fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file');
-      cont.appendChild(el); cont.appendChild(children); children.appendChild(fi); }});
-    cont.appendChild(el); cont.appendChild(children);
-  })
+    // 폴더 내 파일들을 담을 컨테이너 생성
+    const children = document.createElement('div');
+    children.className = 'folder-children';
+    children.id = 'children-'+f.id;
+    children.style.display = f._open? 'block':'none';
+
+    // 폴더에 속한 파일들 찾아서 children 컨테이너에 추가
+    Object.values(db.files).forEach(file => {
+        if(file.folder === f.id) {
+            const fi = document.createElement('div');
+            fi.className='file-item draggable';
+            fi.dataset.id = file.id;
+            if(file.id === currentFileId) { fi.classList.add('active-file'); }
+            fi.innerHTML = renderFileItem(file);
+            fi.onclick = ()=>openFile(file.id);
+            fi.draggable=true;
+            fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file');
+            // 파일 엘리먼트는 children에 추가
+            children.appendChild(fi);
+        }
+    });
+
+    // 최종적으로 폴더와 자식 컨테이너를 DOM에 추가 (한 번만!)
+    cont.appendChild(el);
+    cont.appendChild(children);
+  });
 }
 
 function renderFiles(){
-  const cont = document.getElementById('files'); cont.innerHTML='';
+  const cont = document.getElementById('files');
+  cont.innerHTML='';
   const q = document.getElementById('search').value.toLowerCase();
   const filter = document.getElementById('filter').value;
   (db.order || []).forEach(id=>{
@@ -296,25 +289,23 @@ function renderFiles(){
     if(!f || f.folder) return;
     if(filter==='star' && !f.star) return;
     if(q && !(f.name.toLowerCase().includes(q) || stripTags(f.content).toLowerCase().includes(q))) return
-    const div = document.createElement('div'); div.className='file-item draggable'; div.dataset.id = f.id;
+    const div = document.createElement('div');
+    div.className='file-item draggable';
+    div.dataset.id = f.id;
     if(f.id === currentFileId) { div.classList.add('active-file'); }
-    div.innerHTML = renderFileItem(file);
-    div.onclick = ()=>openFile(f.id); div.draggable = true;
-    
-    // 2. 변경: 드래그 앤 드롭 이벤트 핸들러 수정
+    div.innerHTML = renderFileItem(f); // f -> file 오타 수정
+    div.onclick = ()=>openFile(f.id);
+    div.draggable = true;
     div.ondragstart = (ev)=>onDragStart(ev, f.id, 'file');
     div.ondragover = allowDrop;
     div.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target');
     div.ondrop = (ev) => onDrop(ev, f.id);
-
     cont.appendChild(div);
   })
 }
 
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c])}
 function stripTags(html){return html.replace(/<[^>]+>/g,'')}
-
-// 2. 변경: 새 파일/폴더를 맨 뒤에 추가
 function newFile(){ const id=uid(); db.files[id]={id,name:'무제',content:'',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); }
 function newFolder(){ const name = prompt('폴더 이름:'); if(!name) return; const id=uid('d'); db.folders[id]={id,name}; db.folderOrder.push(id); saveDB(); render(); }
 function toggleFolder(id){ db.folders[id]._open = !db.folders[id]._open; saveDB(); render(); }
