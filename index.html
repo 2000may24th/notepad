@@ -27,9 +27,31 @@
     .folder{background:linear-gradient(90deg,#fdfdfd,#fbfcff);border:1px solid #eee}
     .file-item{background:#fff;border:1px solid #f0f3f7}
     .file-item.draggable{cursor:grab}
-    .file-item .meta{flex:1;overflow:hidden; display: flex; align-items: center; gap: 6px;}
-    .file-item .meta .name{font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-    .file-item .meta .sub{font-size:12px;color:var(--muted)}
+    
+    /* 1. 변경: 파일 메타 정보 UI 수정 (세로 정렬) */
+    .file-item .meta{
+        flex:1;
+        overflow:hidden;
+        display: flex;
+        flex-direction: column; /* 세로 정렬 */
+        align-items: flex-start; /* 좌측 정렬 */
+        gap: 2px;
+    }
+    .file-item .meta .name{
+        font-weight:600;
+        white-space:nowrap;
+        text-overflow:ellipsis;
+        overflow:hidden;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        width: 100%;
+    }
+    .file-item .meta .sub{
+        font-size:11px; /* 글씨 크기 축소 */
+        color:var(--muted);
+        padding-left: 2px;
+    }
     .file-item .actions{display:flex;gap:6px;margin-left:8px}
     .folder.active-file, .file-item.active-file { background-color: var(--active-bg); }
     main{display:flex;flex-direction:column;gap:8px;padding:12px;overflow:hidden}
@@ -46,7 +68,7 @@
     body.dark #statsFooter { border-color: #4a4a4a; color: var(--muted); }
     body.dark #statsFooter span { color: #ddd; }
     .github-icon{width:20px;height:20px;vertical-align:middle}
-    .drop-target{outline:2px dashed rgba(11,102,255,0.12)}
+    .drop-target{outline:2px dashed var(--accent)} /* 드롭 타겟 강조 */
     .folder-children{margin-left:12px;margin-top:6px}
     :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4a4a4a}
     body.dark{background:var(--bg);color:#efefef}
@@ -55,10 +77,7 @@
     body.dark button{background:#5a5a5a;color:#eee;border-color:#666}
     #expandHandle{position:fixed;left:8px;top:16px;width:36px;height:36px;border-radius:6px;background:var(--card);border:1px solid #ddd;display:none;align-items:center;justify-content:center;z-index:300;cursor:pointer}
     .app.sidebar-hidden #expandHandle{display:flex}
-    
-    /* 1. 변경: 북마크 버튼 활성 스타일 */
     #btnBookmark.bookmarked { background-color: #ffc107; color: #000; border-color: #f5b300;}
-
     @media (max-width:800px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}nav{order:2;height:220px;overflow:auto}.editor-wrap{order:1} #statsFooter{grid-column: 1 / -1;}}
   </style>
 </head>
@@ -81,9 +100,9 @@
 
       <div class="list">
         <div class="section-title">폴더</div>
-        <div id="folders" ondragover="allowDrop(event)"></div>
+        <div id="folders" ondragover="allowDrop(event)" ondrop="onFolderContainerDrop(event)" ondragleave="onContainerDragLeave(event)"></div>
         <div class="section-title">파일</div>
-        <div id="files" ondragover="allowDrop(event)"></div>
+        <div id="files" ondragover="allowDrop(event)" ondrop="onFileContainerDrop(event)" ondragleave="onContainerDragLeave(event)"></div>
       </div>
 
       <div style="margin-top:12px">
@@ -134,63 +153,136 @@
 
 <script>
 const DB_KEY = 'web_notepad_v1';
-let db = {folders: {}, files: {}, order: []};
+let db = {folders: {}, files: {}, order: [], folderOrder: []};
 let selectedFiles = new Set();
 let currentFileId = null;
 
 function loadDB(){
   const raw = localStorage.getItem(DB_KEY);
   if(raw) try{db = JSON.parse(raw)}catch(e){console.error(e)}
-  if(!db.files) db = {folders: {}, files: {}, order: []}; // 데이터 형식 오류 방지
+  if(!db.files || !db.order || !db.folderOrder) db = {folders: {}, files: {}, order: [], folderOrder: []};
 }
-function saveDB(){
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
-}
+function saveDB(){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
 function uid(prefix='f'){return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
 loadDB();
 if(Object.keys(db.files).length===0){
   const id = uid(); db.files[id] = {id,name:'새 문서',content:'',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB();}
 let dragId = null, dragType = null;
-function allowDrop(e){ e.preventDefault(); }
+function allowDrop(e){ e.preventDefault(); e.currentTarget.classList.add('drop-target'); }
+function onContainerDragLeave(e) { e.currentTarget.classList.remove('drop-target'); }
 function onDragStart(ev, id, type){ dragId = id; dragType = type; ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
-function onFilesDrop(ev){ ev.preventDefault(); const targetId = ev.target.closest('.file-item')?.dataset?.id || null; if(dragType === 'file' && dragId){ reorderFile(dragId, targetId); dragId=null; render(); }}
-function onFolderDrop(ev){ ev.preventDefault(); const folderEl = ev.target.closest('.folder'); if(!folderEl || !dragId) return; const folderId = folderEl.dataset.id; if(dragType==='file'){ db.files[dragId].folder = folderId; db.files[dragId].updated = Date.now(); saveDB(); render(); } dragId=null; }
-function reorderFile(dragIdLocal, targetId){ const idx = db.order.indexOf(dragIdLocal); if(idx>-1) db.order.splice(idx,1); if(targetId && db.order.indexOf(targetId)!==-1){ const ti = db.order.indexOf(targetId); db.order.splice(ti,0,dragIdLocal); } else { db.order.push(dragIdLocal); } saveDB(); }
-if(!db.folderOrder) db.folderOrder = Object.keys(db.folders);
-function reorderFolder(dragIdLocal, targetId){ const arr = db.folderOrder||[]; const idx = arr.indexOf(dragIdLocal); if(idx>-1) arr.splice(idx,1); if(targetId && arr.indexOf(targetId)!==-1){ const ti = arr.indexOf(targetId); arr.splice(ti,0,dragIdLocal); } else arr.push(dragIdLocal); db.folderOrder = arr; saveDB(); }
 
-// --- render ---
-function render(){
-  renderFolders();
-  renderFiles();
-  updateBookmarkButtonState();
+// 2. 변경: 드래그 앤 드롭 정렬 함수들
+function onDrop(ev, targetId) {
+    ev.preventDefault();
+    ev.stopPropagation(); // 이벤트 버블링 방지
+    const targetElement = ev.currentTarget;
+    targetElement.classList.remove('drop-target');
+
+    if (dragType === 'file' && db.files[dragId].folder) { // 폴더 내 파일 재정렬은 아직 미지원
+        // 여기에 폴더 내 파일 재정렬 로직 추가 가능
+    } else if (dragType === 'file') {
+        reorderFile(dragId, targetId);
+    } else if (dragType === 'folder') {
+        reorderFolder(dragId, targetId);
+    }
+    dragId = null;
+    dragType = null;
+    render();
 }
 
+// 파일 컨테이너(루트)에 드롭 시 맨 뒤로 이동
+function onFileContainerDrop(ev) {
+    ev.preventDefault();
+    ev.currentTarget.classList.remove('drop-target');
+    if (dragType === 'file' && !db.files[dragId].folder) {
+        reorderFile(dragId, null);
+        dragId = null;
+        dragType = null;
+        render();
+    }
+}
+// 폴더 컨테이너에 드롭 시 맨 뒤로 이동
+function onFolderContainerDrop(ev) {
+    ev.preventDefault();
+    ev.currentTarget.classList.remove('drop-target');
+    if (dragType === 'folder') {
+        reorderFolder(dragId, null);
+        dragId = null;
+        dragType = null;
+        render();
+    }
+}
+
+
+function onFolderDrop(ev, folderId){ 
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.currentTarget.classList.remove('drop-target');
+    if(dragType==='file'){
+        db.files[dragId].folder = folderId;
+        db.files[dragId].updated = Date.now();
+        // 루트 목록에서 제거
+        db.order = db.order.filter(id => id !== dragId);
+        saveDB();
+        render();
+    }
+    dragId = null;
+    dragType = null;
+}
+
+function reorderFile(dragIdLocal, targetId){
+  const idx = db.order.indexOf(dragIdLocal); if(idx>-1) db.order.splice(idx,1);
+  if(targetId){ const ti = db.order.indexOf(targetId); db.order.splice(ti,0,dragIdLocal); }
+  else { db.order.push(dragIdLocal); } // targetId 없으면 맨 뒤로
+  saveDB();
+}
+function reorderFolder(dragIdLocal, targetId){
+  const arr = db.folderOrder; const idx = arr.indexOf(dragIdLocal); if(idx>-1) arr.splice(idx,1);
+  if(targetId){ const ti = arr.indexOf(targetId); arr.splice(ti,0,dragIdLocal); }
+  else { arr.push(dragIdLocal); } // targetId 없으면 맨 뒤로
+  db.folderOrder = arr;
+  saveDB();
+}
+
+function render(){ renderFolders(); renderFiles(); updateBookmarkButtonState(); }
+
+// 1. 변경: 파일 아이템 렌더링 함수 UI 수정
 function renderFileItem(file) {
-    const starIcon = file.star ? '<span>⭐</span>' : '';
-    // 1. 변경: 북마크 아이콘 표시
-    return `<div class="meta">${starIcon}<div class="name">${escapeHtml(file.name)}</div></div>
-            <div class="sub">${new Date(file.updated).toLocaleString()}</div>
-            <div class="actions"><input type="checkbox" onchange="toggleSelect(event,'${file.id}')" ${selectedFiles.has(file.id)?'checked':''}></div>`;
+    const starIcon = file.star ? '⭐' : '';
+    return `<div class="meta">
+                <div class="name">${starIcon} ${escapeHtml(file.name)}</div>
+                <div class="sub">${new Date(file.updated).toLocaleString('ko-KR', {dateStyle: 'short', timeStyle: 'short'})}</div>
+            </div>
+            <div class="actions">
+                <input type="checkbox" onchange="toggleSelect(event,'${file.id}')" ${selectedFiles.has(file.id)?'checked':''}>
+            </div>`;
 }
 
 function renderFolders(){
   const cont = document.getElementById('folders'); cont.innerHTML='';
-  const order = db.folderOrder && db.folderOrder.length?db.folderOrder:Object.keys(db.folders);
+  const order = db.folderOrder || [];
   const currentFile = db.files[currentFileId];
 
   order.forEach(fid=>{ const f = db.folders[fid]; if(!f) return; const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id;
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')">▸</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">📁 ${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
+    
+    // 2. 변경: 드래그 앤 드롭 이벤트 핸들러 수정
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder');
-    el.ondragover = (ev)=>{ ev.preventDefault(); el.classList.add('drop-target'); };
-    el.ondragleave = ()=>{ el.classList.remove('drop-target'); };
-    el.ondrop = (ev)=>{ el.classList.remove('drop-target'); onFolderDrop(ev); if(dragType==='folder') { reorderFolder(dragId, f.id); dragId=null; render(); } };
+    el.ondragover = allowDrop;
+    el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target');
+    el.ondrop = (ev) => {
+        if (dragType === 'file') onFolderDrop(ev, f.id);
+        else onDrop(ev, f.id);
+    };
+
     const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
     Object.values(db.files).forEach(file=>{ if(file.folder===f.id){ const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id;
       if(file.id === currentFileId) { fi.classList.add('active-file'); }
-      fi.innerHTML = renderFileItem(file); // Use helper function
-      fi.onclick = ()=>openFile(file.id); fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); fi.ondragover=(ev)=>{ev.preventDefault(); fi.classList.add('drop-target')}; fi.ondragleave=()=>fi.classList.remove('drop-target'); fi.ondrop=(ev)=>{fi.classList.remove('drop-target'); if(dragType==='file'){ reorderFile(dragId,file.id); dragId=null; render(); }}; children.appendChild(fi); }});
+      fi.innerHTML = renderFileItem(file);
+      fi.onclick = ()=>openFile(file.id); fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file');
+      cont.appendChild(el); cont.appendChild(children); children.appendChild(fi); }});
     cont.appendChild(el); cont.appendChild(children);
   })
 }
@@ -199,28 +291,32 @@ function renderFiles(){
   const cont = document.getElementById('files'); cont.innerHTML='';
   const q = document.getElementById('search').value.toLowerCase();
   const filter = document.getElementById('filter').value;
-  db.order.forEach(id=>{
+  (db.order || []).forEach(id=>{
     const f = db.files[id];
     if(!f || f.folder) return;
     if(filter==='star' && !f.star) return;
     if(q && !(f.name.toLowerCase().includes(q) || stripTags(f.content).toLowerCase().includes(q))) return
     const div = document.createElement('div'); div.className='file-item draggable'; div.dataset.id = f.id;
     if(f.id === currentFileId) { div.classList.add('active-file'); }
-    div.innerHTML = renderFileItem(f); // Use helper function
-    div.onclick = ()=>openFile(f.id);
-    div.draggable = true;
+    div.innerHTML = renderFileItem(file);
+    div.onclick = ()=>openFile(f.id); div.draggable = true;
+    
+    // 2. 변경: 드래그 앤 드롭 이벤트 핸들러 수정
     div.ondragstart = (ev)=>onDragStart(ev, f.id, 'file');
-    div.ondragover = (ev)=>{ ev.preventDefault(); div.classList.add('drop-target'); };
-    div.ondragleave = ()=>{ div.classList.remove('drop-target'); };
-    div.ondrop = (ev)=>{ ev.classList.remove('drop-target'); if(dragType==='file'){ reorderFile(dragId, f.id); dragId=null; render(); } };
+    div.ondragover = allowDrop;
+    div.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target');
+    div.ondrop = (ev) => onDrop(ev, f.id);
+
     cont.appendChild(div);
   })
 }
 
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c])}
 function stripTags(html){return html.replace(/<[^>]+>/g,'')}
-function newFile(){ const id=uid(); db.files[id]={id,name:'무제',content:'',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.unshift(id); saveDB(); render(); openFile(id); }
-function newFolder(){ const name = prompt('폴더 이름:'); if(!name) return; const id=uid('d'); db.folders[id]={id,name}; db.folderOrder = db.folderOrder || []; db.folderOrder.unshift(id); saveDB(); render(); }
+
+// 2. 변경: 새 파일/폴더를 맨 뒤에 추가
+function newFile(){ const id=uid(); db.files[id]={id,name:'무제',content:'',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); }
+function newFolder(){ const name = prompt('폴더 이름:'); if(!name) return; const id=uid('d'); db.folders[id]={id,name}; db.folderOrder.push(id); saveDB(); render(); }
 function toggleFolder(id){ db.folders[id]._open = !db.folders[id]._open; saveDB(); render(); }
 function openFolder(id){ db.folders[id]._open = !db.folders[id]._open; saveDB(); render(); }
 function renameFolder(id){ const name = prompt('새 폴더 이름:', db.folders[id].name); if(!name) return; db.folders[id].name=name; saveDB(); render(); }
@@ -237,21 +333,10 @@ function downloadPdf(id){ const f=db.files[id]; const { jsPDF } = window.jspdf; 
 function downloadSelectedFormats(formats){ if(!currentFileId) return alert('파일을 선택하세요'); formats.forEach(fmt=>{ if(fmt==='txt') downloadTxt(currentFileId); if(fmt==='docx') downloadDocx(currentFileId); if(fmt==='pdf') downloadPdf(currentFileId); }); }
 const fileInput = document.getElementById('fileInput'); fileInput.addEventListener('change', async e=>{ /* ... (unchanged) ... */ });
 function arrayBufferToBase64(buffer){ let binary=''; const bytes = new Uint8Array(buffer); const len = bytes.byteLength; for(let i=0;i<len;i++){binary+=String.fromCharCode(bytes[i]);} return btoa(binary); }
-function mergeSelected(){ if(selectedFiles.size<2) return alert('두 개 이상의 파일을 선택하세요'); const ids = Array.from(selectedFiles); let merged=''; let name='병합문서'; ids.forEach(id=>{const f=db.files[id]; merged += `<h3>${escapeHtml(f.name)}</h3>` + (f.content||'') + '<hr>';}); const id = uid(); db.files[id]={id,name: name,content:merged,folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.unshift(id); saveDB(); render(); openFile(id); selectedFiles.clear(); }
+function mergeSelected(){ if(selectedFiles.size<2) return alert('두 개 이상의 파일을 선택하세요'); const ids = Array.from(selectedFiles); let merged=''; let name='병합문서'; ids.forEach(id=>{const f=db.files[id]; merged += `<h3>${escapeHtml(f.name)}</h3>` + (f.content||'') + '<hr>';}); const id = uid(); db.files[id]={id,name: name,content:merged,folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); selectedFiles.clear(); }
 function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 파일이 없습니다'); if(!confirm('선택된 파일을 삭제할까요?')) return; selectedFiles.forEach(id=>{delete db.files[id]; db.order = db.order.filter(x=>x!==id)}); saveDB(); render(); selectedFiles.clear(); }
-
 function updateStats() { const editor = document.getElementById('editor'); const text = editor.innerText || ''; const html = editor.innerHTML || ''; const charCount = text.length; document.getElementById('statChars').textContent = charCount.toLocaleString(); const charCountNoSpace = text.replace(/\s/g, '').length; document.getElementById('statCharsNoSpace').textContent = charCountNoSpace.toLocaleString(); const words = text.match(/\S+/g) || []; document.getElementById('statWords').textContent = words.length.toLocaleString(); const paragraphs = text.split('\n').filter(line => line.trim() !== '').length; document.getElementById('statParagraphs').textContent = paragraphs.toLocaleString(); const sizeInBytes = new Blob([html]).size; let size = `${sizeInBytes} B`; if (sizeInBytes >= 1024 * 1024) { size = `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`; } else if (sizeInBytes >= 1024) { size = `${(sizeInBytes / 1024).toFixed(1)} KB`; } document.getElementById('statSize').textContent = size; }
-
-// --- UI bindings ---
-document.getElementById('btnNewFile').onclick = newFile;
-document.getElementById('btnNewFolder').onclick = newFolder;
-document.getElementById('search').addEventListener('input', render);
-document.getElementById('filter').addEventListener('change', render);
-document.getElementById('btnSave').onclick = saveCurrent;
-document.getElementById('btnExport').onclick = ()=>{ openSaveExportModal(); };
-document.getElementById('btnMerge').onclick = mergeSelected;
-document.getElementById('btnDeleteSelected').onclick = deleteSelected;
-const autoSaveCb = document.getElementById('autoSave'); autoSaveCb.addEventListener('change', ()=>{ if(autoSaveCb.checked) startAutoSave(); else stopAutoSave();}); let autoSaveTimer=null;
+document.getElementById('btnNewFile').onclick = newFile; document.getElementById('btnNewFolder').onclick = newFolder; document.getElementById('search').addEventListener('input', render); document.getElementById('filter').addEventListener('change', render); document.getElementById('btnSave').onclick = saveCurrent; document.getElementById('btnExport').onclick = ()=>{ openSaveExportModal(); }; document.getElementById('btnMerge').onclick = mergeSelected; document.getElementById('btnDeleteSelected').onclick = deleteSelected; const autoSaveCb = document.getElementById('autoSave'); autoSaveCb.addEventListener('change', ()=>{ if(autoSaveCb.checked) startAutoSave(); else stopAutoSave();}); let autoSaveTimer=null;
 function startAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer = setInterval(()=>{ if(currentFileId) saveCurrent(); }, 3000);} function stopAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer=null}
 document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); saveCurrent(); } if((e.ctrlKey||e.metaKey) && e.key==='b'){ e.preventDefault(); doCmd('bold'); }});
 document.getElementById('editor').addEventListener('input', ()=>{ if(currentFileId) { db.files[currentFileId].updated=Date.now(); } updateStats(); });
@@ -259,81 +344,19 @@ const fileNameInput = document.getElementById('fileNameInput'); fileNameInput.ad
 const appRoot = document.getElementById('appRoot'); const toggleSidebarBtn = document.getElementById('toggleSidebarBtn'); const expandHandle = document.getElementById('expandHandle');
 function toggleSidebar() { const isHidden = appRoot.classList.toggle('sidebar-hidden'); toggleSidebarBtn.textContent = isHidden ? '➡' : '⬅'; toggleSidebarBtn.title = isHidden ? '사이드바 펼치기' : '사이드바 숨기기'; }
 toggleSidebarBtn.addEventListener('click', toggleSidebar); expandHandle.addEventListener('click', toggleSidebar);
-document.getElementById('btnSettings').addEventListener('click', ()=>{ openSettingsModal(); });
-
-// 1. 변경: 새 버튼에 이벤트 핸들러 연결
-document.getElementById('btnDeleteFile').onclick = deleteCurrentFile;
-document.getElementById('btnBookmark').onclick = toggleBookmark;
-
-function toggleBookmark() {
-    if (!currentFileId) return alert('파일을 선택하세요');
-    const file = db.files[currentFileId];
-    file.star = !file.star; // 상태 반전
-    file.updated = Date.now();
-    saveDB();
-    render(); // UI 즉시 갱신
-}
-
-function updateBookmarkButtonState() {
-    const btn = document.getElementById('btnBookmark');
-    if (currentFileId && db.files[currentFileId] && db.files[currentFileId].star) {
-        btn.classList.add('bookmarked');
-    } else {
-        btn.classList.remove('bookmarked');
-    }
-}
-
-
+document.getElementById('btnSettings').addEventListener('click', ()=>{ openSettingsModal(); }); document.getElementById('btnDeleteFile').onclick = deleteCurrentFile; document.getElementById('btnBookmark').onclick = toggleBookmark;
+function toggleBookmark() { if (!currentFileId) return alert('파일을 선택하세요'); const file = db.files[currentFileId]; file.star = !file.star; file.updated = Date.now(); saveDB(); render(); }
+function updateBookmarkButtonState() { const btn = document.getElementById('btnBookmark'); if (currentFileId && db.files[currentFileId] && db.files[currentFileId].star) { btn.classList.add('bookmarked'); } else { btn.classList.remove('bookmarked'); }}
 function doCmd(cmd, val=null){ document.execCommand(cmd, false, val); }
 let dark=false; function applyDark(d){ dark = !!d; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); localStorage.setItem('wn_dark', dark? '1':'0'); }
 if(localStorage.getItem('wn_dark')==='1') applyDark(true);
-if(db.order.length) openFile(db.order[0]); else updateStats();
+if(db.order && db.order.length) openFile(db.order[0]); else updateStats();
 render();
-
-// --- Modals ---
 function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
 function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 형식 선택</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="exportCancel">취소</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportCancel').onclick = closeModal; document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; }
-
-// 2. 변경: 환경설정 모달 내용 업데이트
-function openSettingsModal(){ 
-  const html = `
-    <h3>환경설정</h3>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
-      <label style="display:flex; align-items:center; justify-content: space-between;">
-        <span>다크모드 사용</span>
-        <input type="checkbox" id="setting_dark">
-      </label>
-      <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;">
-      <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th (GitHub)</a></div>
-      <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 삭제 (초기화)</button>
-      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-        <button id="setting_close">닫기</button>
-      </div>
-    </div>`;
-  openModal(html);
-  document.getElementById('setting_dark').checked = dark;
-  document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); };
-  document.getElementById('resetAll').onclick = resetAllData;
-  document.getElementById('setting_close').onclick = closeModal;
-}
-
-// 2. 변경: 전체 삭제 기능 함수 추가
-function resetAllData() {
-    if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
-        db = {folders: {}, files: {}, order: []};
-        saveDB();
-        currentFileId = null;
-        document.getElementById('editor').innerHTML = '';
-        document.getElementById('fileNameInput').value = '';
-        render();
-        updateStats();
-        closeModal();
-        alert('모든 데이터가 초기화되었습니다.');
-    }
-}
-
-
+function openSettingsModal(){ const html = `<h3>환경설정</h3> <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> <label style="display:flex; align-items:center; justify-content: space-between;"> <span>다크모드 사용</span> <input type="checkbox" id="setting_dark"> </label> <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th (GitHub)</a></div> <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 삭제 (초기화)</button> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="setting_close">닫기</button> </div> </div>`; openModal(html); document.getElementById('setting_dark').checked = dark; document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); }; document.getElementById('resetAll').onclick = resetAllData; document.getElementById('setting_close').onclick = closeModal; }
+function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameInput').value = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
 </script>
 </body>
 </html>
