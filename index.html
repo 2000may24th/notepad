@@ -105,17 +105,17 @@
           <select id="fontSize" onchange="doCmd('fontSize', this.value)"><option value="3">기본</option><option value="4">크게</option><option value="5">더 크게</option></select>
         </div>
         <div class="group">
-            <button id="btnSave" class="btn-action">💾 저장</button>
+            <button id="btnSave" class="btn-action">저장</button>
             <button id="btnExport" class="btn-action">내보내기</button>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="autoSave"> 자동저장</label>
         </div>
         <div class="top-right-actions">
           <h3 id="fileNameDisplay" style="margin: 0; font-size: 16px; font-weight: 600; white-space: nowrap;"></h3>
-          <button id="btnRenameFile" class="btn-action">✏️ 이름 수정</button>
-          <button id="btnFindReplace" class="btn-action">🔍 찾기/바꾸기</button>
-          <button id="btnBookmark" class="btn-action">⭐ 북마크</button>
-          <button id="btnDeleteFile" class="btn-action">🗑️ 삭제</button>
-          <button id="btnSettings">⚙ 환경설정</button>
+          <button id="btnRenameFile" class="btn-action">이름 수정</button>
+          <button id="btnFindReplace" class="btn-action">찾기/바꾸기</button>
+          <button id="btnBookmark" class="btn-action">⭐</button>
+          <button id="btnDeleteFile" class="btn-action">삭제</button>
+          <button id="btnSettings">설정</button>
         </div>
       </div>
       <div id="editor" contenteditable="true" spellcheck="false"></div>
@@ -123,7 +123,7 @@
     <div id="expandHandle" title="사이드바 펼치기">➡</div>
     <footer id="statsFooter">
         글자: <span id="statChars">0</span>
-        공백제외: <span id="statCharsNoSpace">0</span>
+        공백 제외: <span id="statCharsNoSpace">0</span>
         단어: <span id="statWords">0</span>
         문단: <span id="statParagraphs">0</span>
         용량: <span id="statSize">0 B</span>
