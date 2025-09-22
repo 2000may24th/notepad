@@ -10,7 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
 
   <style>
-    :root{--bg:#f7f8fb;--card:#fff;--muted:#666;--sidebar: #f8fafc;--accent:#0b66ff}
+    :root{--bg:#f7f8fb;--card:#fff;--muted:#666;--sidebar:#f8fafc;--accent:#0b66ff}
     *{box-sizing:border-box}
     html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Noto Sans KR",sans-serif;background:var(--bg);color:#111}
 
@@ -46,6 +46,11 @@
     #editor[contenteditable="true"]:focus{outline:3px solid rgba(100,150,250,0.12)}
 
     .top-right-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+    .btn-action{padding:6px 8px;border-radius:6px}
+
+    /* modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:200}
+    .modal{background:var(--card);padding:16px;border-radius:8px;width:320px;box-shadow:0 6px 32px rgba(0,0,0,0.15)}
 
     footer{grid-column:1 / -1;background:transparent;padding:8px 12px;border-top:1px solid #e9edf3;display:flex;justify-content:space-between;align-items:center}
     .github-icon{width:20px;height:20px;vertical-align:middle}
@@ -53,12 +58,19 @@
     /* drag target highlight */
     .drop-target{outline:2px dashed rgba(11,102,255,0.12)}
 
+    /* tree */
+    .folder-children{margin-left:12px;margin-top:6px}
+
     /* dark mode (not pure black) */
     :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff}
     body.dark{background:var(--bg);color:#efefef}
     body.dark nav{background:var(--sidebar);border-color:#4a4a4a}
     body.dark .file-item, body.dark .folder{background:var(--card);border-color:#4a4a4a}
     body.dark button{background:#5a5a5a;color:#eee;border-color:#666}
+
+    /* expand handle when sidebar hidden */
+    #expandHandle{position:fixed;left:8px;top:16px;width:36px;height:36px;border-radius:6px;background:var(--card);border:1px solid #ddd;display:none;align-items:center;justify-content:center;z-index:300;cursor:pointer}
+    nav.hidden + #expandHandle{display:flex}
 
     /* responsive */
     @media (max-width:800px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}nav{order:2;height:220px;overflow:auto}.editor-wrap{order:1}}
@@ -83,10 +95,10 @@
 
       <div class="list">
         <div class="section-title">폴더</div>
-        <div id="folders" ondragover="allowDrop(event)" ondrop="onFolderDrop(event)"></div>
+        <div id="folders" ondragover="allowDrop(event)"></div>
 
         <div class="section-title">파일</div>
-        <div id="files" ondragover="allowDrop(event)" ondrop="onFilesDrop(event)"></div>
+        <div id="files" ondragover="allowDrop(event)"></div>
       </div>
 
       <div style="margin-top:12px">
@@ -100,6 +112,8 @@
       </div>
     </nav>
 
+    <div id="expandHandle" title="사이드바 펼치기">➡</div>
+
     <main class="editor-wrap">
       <div class="toolbar">
         <div class="group">
@@ -112,22 +126,15 @@
         </div>
 
         <div class="group">
-          <button id="btnSave">저장</button>
-          <button id="btnExportTxt">.txt 저장</button>
-          <button id="btnExportDocx">.docx 저장</button>
-          <button id="btnExportPdf">.pdf 저장</button>
+          <button id="btnSaveExport" class="btn-action">저장 / 내보내기</button>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="autoSave"> 자동저장</label>
         </div>
 
         <div class="top-right-actions">
           <input id="fileNameInput" type="text" placeholder="파일 이름" style="min-width:200px;padding:6px;border-radius:6px;border:1px solid #ddd;">
-          <button id="btnDownload">다운로드</button>
-          <button id="btnDelete">삭제</button>
-          <button id="btnStar">⭐</button>
-          <button id="btnMove">이동</button>
-          <select id="moveToFolder" style="display:none"></select>
+          <button id="btnActions" class="btn-action">작업 ▾</button>
           <button id="btnMergeUI">병합 UI</button>
-          <button id="btnToggleDark">다크모드</button>
+          <button id="btnSettings">⚙ 환경설정</button>
         </div>
       </div>
 
@@ -135,11 +142,14 @@
 
     </main>
 
-    <footer>
+    <footer style="display:none">
       <div>만든이: <a class="github" href="https://github.com/2000may24th" target="_blank"><img class="github-icon" src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="github"></a></div>
       <div style="font-size:12px;color:var(--muted)">로컬 저장 • 정적 페이지 (Github Pages)에서 동작</div>
     </footer>
   </div>
+
+  <!-- Modals -->
+  <div id="modalRoot" style="display:none"></div>
 
 <script>
 // --- 데이터 model (localStorage 기반) ---
@@ -198,12 +208,16 @@ function render(){
 function renderFolders(){
   const cont = document.getElementById('folders'); cont.innerHTML='';
   const order = db.folderOrder && db.folderOrder.length?db.folderOrder:Object.keys(db.folders);
-  order.forEach(fid=>{ const f = db.folders[fid]; if(!f) return; const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id; el.innerHTML = `<div style="flex:1">📁 ${escapeHtml(f.name)}</div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
+  order.forEach(fid=>{ const f = db.folders[fid]; if(!f) return; const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id; el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')">▸</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">📁 ${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder');
     el.ondragover = (ev)=>{ ev.preventDefault(); el.classList.add('drop-target'); };
     el.ondragleave = ()=>{ el.classList.remove('drop-target'); };
     el.ondrop = (ev)=>{ el.classList.remove('drop-target'); onFolderDrop(ev); if(dragType==='folder') { reorderFolder(dragId, f.id); dragId=null; render(); } };
-    cont.appendChild(el);
+    // children container
+    const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
+    // render files in this folder
+    Object.values(db.files).forEach(file=>{ if(file.folder===f.id){ const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id; fi.innerHTML = `<div class="meta"><div class="name">${escapeHtml(file.name)}</div><div class="sub">${new Date(file.updated).toLocaleString()}</div></div><div class="actions"><input type="checkbox" onchange="toggleSelect(event,'${file.id}')" ${selectedFiles.has(file.id)?'checked':''}></div>`; fi.onclick = ()=>openFile(file.id); fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); fi.ondragover=(ev)=>{ev.preventDefault(); fi.classList.add('drop-target')}; fi.ondragleave=()=>fi.classList.remove('drop-target'); fi.ondrop=(ev)=>{fi.classList.remove('drop-target'); if(dragType==='file'){ reorderFile(dragId,file.id); dragId=null; render(); }}; children.appendChild(fi); }});
+    cont.appendChild(el); cont.appendChild(children);
   })
 }
 
@@ -214,11 +228,15 @@ function renderFiles(){
   db.order.forEach(id=>{
     const f = db.files[id];
     if(!f) return;
+    // only show files not in folder here
+    if(f.folder) return;
     if(filter==='star' && !f.star) return;
     if(q){if(!(f.name.toLowerCase().includes(q) || stripTags(f.content).toLowerCase().includes(q))) return}
     const div = document.createElement('div'); div.className='file-item draggable'; div.dataset.id = f.id;
-    div.innerHTML = `<div class="meta"><div class="name">${escapeHtml(f.name)}</div><div class="sub">${f.folder?db.folders[f.folder]?.name+' • ':''}${new Date(f.updated).toLocaleString()}</div></div>
-      <div class="actions"><input type="checkbox" onchange="toggleSelect(event,'${f.id}')" ${selectedFiles.has(f.id)?'checked':''}><button onclick="openFile('${f.id}')">열기</button><button onclick="toggleStar('${f.id}')">${f.star?'★':'☆'}</button></div>`;
+    div.innerHTML = `<div class="meta"><div class="name">${escapeHtml(f.name)}</div><div class="sub">${new Date(f.updated).toLocaleString()}</div></div>
+      <div class="actions"><input type="checkbox" onchange="toggleSelect(event,'${f.id}')" ${selectedFiles.has(f.id)?'checked':''}></div>`;
+    // click to open
+    div.onclick = ()=>openFile(f.id);
     // drag handlers
     div.draggable = true;
     div.ondragstart = (ev)=>onDragStart(ev, f.id, 'file');
@@ -247,6 +265,9 @@ function newFile(){
 function newFolder(){
   const name = prompt('폴더 이름:'); if(!name) return; const id=uid('d'); db.folders[id]={id,name}; db.folderOrder = db.folderOrder || []; db.folderOrder.unshift(id); saveDB(); render();
 }
+
+function toggleFolder(id){ db.folders[id]._open = !db.folders[id]._open; render(); }
+function openFolder(id){ db.folders[id]._open = !db.folders[id]._open; render(); }
 
 function renameFolder(id){
   const name = prompt('새 폴더 이름:', db.folders[id].name); if(!name) return; db.folders[id].name=name; saveDB(); render();
@@ -283,7 +304,10 @@ function toggleSelect(ev,id){ if(ev.target.checked) selectedFiles.add(id); else 
 function toggleStar(id){ db.files[id].star = !db.files[id].star; saveDB(); render(); }
 
 function downloadTxt(id){ const f=db.files[id]; const blob=new Blob([stripTags(f.content)],{type:'text/plain;charset=utf-8'}); saveAs(blob, (f.name||'untitled')+'.txt'); }
-function downloadCurrent(){ if(!currentFileId) return alert('파일 선택'); downloadTxt(currentFileId); }
+function downloadDocx(id){ const f = db.files[id]; const html = `<html><body>${f.content||''}</body></html>`; try{ const converted = window.htmlDocx.asBlob(html); saveAs(converted, (f.name||'document') + '.docx'); }catch(e){alert('DOCX 생성 실패: '+e.message)} }
+function downloadPdf(id){ const f=db.files[id]; const { jsPDF } = window.jspdf; const doc = new jsPDF(); const text = stripTags(f.content); const lines = doc.splitTextToSize(text, 180); doc.text(lines,10,10); const blob = doc.output('blob'); saveAs(blob, (f.name||'doc') + '.pdf'); }
+
+function downloadSelectedFormats(formats){ if(!currentFileId) return alert('파일을 선택하세요'); formats.forEach(fmt=>{ if(fmt==='txt') downloadTxt(currentFileId); if(fmt==='docx') downloadDocx(currentFileId); if(fmt==='pdf') downloadPdf(currentFileId); }); }
 
 // --- import ---
 const fileInput = document.getElementById('fileInput'); fileInput.addEventListener('change', async e=>{
@@ -320,32 +344,24 @@ function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 �
 // --- move ---
 function moveSelected(){ if(selectedFiles.size===0) return alert('선택된 파일이 없습니다'); const to = document.getElementById('moveToFolder').value; selectedFiles.forEach(id=>{db.files[id].folder = (to==='__null'?null:to); db.files[id].updated = Date.now()}); saveDB(); render(); selectedFiles.clear(); }
 
-// --- export docx/pdf/txt global (current file) ---
-async function exportDocx(id){ const f = db.files[id]; const html = `<html><body>${f.content||''}</body></html>`; try{
-  const converted = window.htmlDocx.asBlob(html);
-  saveAs(converted, (f.name||'document') + '.docx');
-}catch(e){alert('DOCX 생성 실패: '+e.message)} }
-
-async function exportPdf(id){ const f=db.files[id]; const { jsPDF } = window.jspdf; const doc = new jsPDF(); const text = stripTags(f.content); const lines = doc.splitTextToSize(text, 180); doc.text(lines,10,10); const blob = doc.output('blob'); saveAs(blob, (f.name||'doc') + '.pdf'); }
-
 // --- UI bindings ---
 document.getElementById('btnNewFile').onclick = newFile;
 document.getElementById('btnNewFolder').onclick = newFolder;
 document.getElementById('search').addEventListener('input', render);
 document.getElementById('filter').addEventListener('change', render);
-document.getElementById('btnSave').onclick = ()=>{saveCurrent(); alert('저장됨')};
-document.getElementById('btnExportTxt').onclick = ()=>{ if(!currentFileId) return alert('파일 선택'); downloadTxt(currentFileId)};
-document.getElementById('btnExportDocx').onclick = ()=>{ if(!currentFileId) return alert('파일 선택'); exportDocx(currentFileId)};
-document.getElementById('btnExportPdf').onclick = ()=>{ if(!currentFileId) return alert('파일 선택'); exportPdf(currentFileId)};
+document.getElementById('btnSaveExport').onclick = ()=>{ openSaveExportModal(); };
 document.getElementById('btnMerge').onclick = mergeSelected;
 document.getElementById('btnDeleteSelected').onclick = deleteSelected;
 
+// actions menu
+const btnActions = document.getElementById('btnActions'); btnActions.addEventListener('click', ()=>{ openActionsMenu(); });
+
 // move
 const btnMove = document.getElementById('btnMove'); const selMove = document.getElementById('moveToFolder');
-btnMove.onclick = ()=>{ if(selMove.style.display==='none'){selMove.style.display='inline-block'; btnMove.textContent='이동(확인)';} else {moveSelected(); selMove.style.display='none'; btnMove.textContent='이동';}}
+btnMove && (btnMove.onclick = ()=>{ if(selMove.style.display==='none'){selMove.style.display='inline-block'; btnMove.textContent='이동(확인)';} else {moveSelected(); selMove.style.display='none'; btnMove.textContent='이동';}})
 
 // star
-document.getElementById('btnStar').onclick = ()=>{ if(!currentFileId) return alert('파일 선택'); toggleStar(currentFileId)};
+document.getElementById('btnStar')?.addEventListener('click', ()=>{ if(!currentFileId) return alert('파일 선택'); toggleStar(currentFileId); });
 
 // merge UI quick
 let mergeMode=false; document.getElementById('btnMergeUI').onclick = ()=>{mergeMode=!mergeMode; alert('병합 UI ' + (mergeMode?'활성화':'비활성화') + '. 좌측에서 파일을 체크한 뒤 "선택 파일 병합" 클릭')}
@@ -367,13 +383,20 @@ document.getElementById('editor').addEventListener('input', ()=>{ if(currentFile
 const fileNameInput = document.getElementById('fileNameInput'); fileNameInput.addEventListener('change', renameCurrentFileFromInput);
 
 // sidebar toggle
-const toggleSidebarBtn = document.getElementById('toggleSidebarBtn'); toggleSidebarBtn.addEventListener('click', ()=>{ document.getElementById('sidebar').classList.toggle('hidden'); toggleSidebarBtn.textContent = document.getElementById('sidebar').classList.contains('hidden') ? '➡' : '⬅'; });
+const toggleSidebarBtn = document.getElementById('toggleSidebarBtn'); const expandHandle = document.getElementById('expandHandle');
+toggleSidebarBtn.addEventListener('click', ()=>{ document.getElementById('sidebar').classList.toggle('hidden'); toggleSidebarBtn.textContent = document.getElementById('sidebar').classList.contains('hidden') ? '➡' : '⬅'; });
+expandHandle.addEventListener('click', ()=>{ document.getElementById('sidebar').classList.remove('hidden'); toggleSidebarBtn.textContent='⬅'; });
+
+// settings modal
+const btnSettings = document.getElementById('btnSettings'); btnSettings.addEventListener('click', ()=>{ openSettingsModal(); });
 
 // helper: command
 function doCmd(cmd, val=null){ document.execCommand(cmd, false, val); }
 
 // toggle dark
-let dark=false; document.getElementById('btnToggleDark').onclick = ()=>{ dark = !dark; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); }
+let dark=false; function applyDark(d){ dark = !!d; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); localStorage.setItem('wn_dark', dark? '1':'0'); }
+// load saved theme
+if(localStorage.getItem('wn_dark')==='1') applyDark(true);
 
 // download whole database
 function exportAll(){ const blob = new Blob([JSON.stringify(db, null, 2)],{type:'application/json'}); saveAs(blob, 'web-notes-backup.json'); }
@@ -386,7 +409,68 @@ if(db.order.length) openFile(db.order[0]);
 render();
 
 // expose some functions for inline buttons
-window.newFile=newFile; window.newFolder=newFolder; window.openFile=openFile; window.deleteFile=deleteFileById; window.toggleStar=toggleStar; window.toggleSelect=toggleSelect; window.downloadTxt=downloadTxt; window.mergeSelected=mergeSelected; window.deleteSelected=deleteSelected; window.exportDocx=exportDocx; window.exportPdf=exportPdf; window.saveCurrent=saveCurrent; window.render=render; window.saveDB=saveDB;
+window.newFile=newFile; window.newFolder=newFolder; window.openFile=openFile; window.deleteFile=deleteFileById; window.toggleStar=toggleStar; window.toggleSelect=toggleSelect; window.downloadTxt=downloadTxt; window.mergeSelected=mergeSelected; window.deleteSelected=deleteSelected; window.exportDocx=downloadDocx; window.exportPdf=downloadPdf; window.saveCurrent=saveCurrent; window.render=render; window.saveDB=saveDB;
+
+// --- UI modal implementations ---
+function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
+function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
+
+function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `
+  <h3>내보내기 형식 선택</h3>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+    <label><input type="checkbox" id="fmt_txt" checked> .txt</label>
+    <label><input type="checkbox" id="fmt_docx"> .docx</label>
+    <label><input type="checkbox" id="fmt_pdf"> .pdf</label>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+    <button id="exportCancel">취소</button>
+    <button id="exportOk">내보내기</button>
+  </div>
+`;
+  openModal(html);
+  document.getElementById('exportCancel').onclick = closeModal;
+  document.getElementById('exportOk').onclick = ()=>{
+    const fmts = [];
+    if(document.getElementById('fmt_txt').checked) fmts.push('txt');
+    if(document.getElementById('fmt_docx').checked) fmts.push('docx');
+    if(document.getElementById('fmt_pdf').checked) fmts.push('pdf');
+    if(fmts.length===0) return alert('하나 이상 선택하세요');
+    saveCurrent(); downloadSelectedFormats(fmts); closeModal();
+  };
+}
+
+function openActionsMenu(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `
+  <h3>작업</h3>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+    <button id="act_delete">삭제</button>
+    <button id="act_toggle_star">북마크 토글</button>
+    <div style="display:flex;gap:8px;align-items:center"><select id="act_move_list"></select><button id="act_move_confirm">이동</button></div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+    <button id="act_close">닫기</button>
+  </div>
+`;
+  openModal(html);
+  const moveList = document.getElementById('act_move_list'); moveList.innerHTML=''; const opt = document.createElement('option'); opt.value='__null'; opt.textContent='루트'; moveList.appendChild(opt); Object.values(db.folders).forEach(f=>{ const o=document.createElement('option'); o.value=f.id; o.textContent=f.name; moveList.appendChild(o); });
+  document.getElementById('act_delete').onclick = ()=>{ if(confirm('파일을 삭제할까요?')){ deleteFileById(currentFileId); closeModal(); } };
+  document.getElementById('act_toggle_star').onclick = ()=>{ toggleStar(currentFileId); closeModal(); };
+  document.getElementById('act_move_confirm').onclick = ()=>{ const to = moveList.value; db.files[currentFileId].folder = (to==='__null'?null:to); db.files[currentFileId].updated = Date.now(); saveDB(); render(); closeModal(); };
+  document.getElementById('act_close').onclick = closeModal;
+}
+
+function openSettingsModal(){ const html = `
+  <h3>환경설정</h3>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+    <label><input type="checkbox" id="setting_dark"> 다크모드 사용</label>
+    <div>제작자: <a href="https://github.com/2000may24th" target="_blank">2000may24th (GitHub)</a></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button id="setting_close">닫기</button></div>
+  </div>
+`;
+  openModal(html);
+  document.getElementById('setting_dark').checked = dark;
+  document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); };
+  document.getElementById('setting_close').onclick = closeModal;
+}
 
 </script>
 </body>
