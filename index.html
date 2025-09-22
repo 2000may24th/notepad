@@ -48,8 +48,7 @@
     .github-icon{width:20px;height:20px;vertical-align:middle}
     .drop-target{outline:2px dashed var(--accent)}
 
-    /* 2. 오류 수정: 다크모드 활성 항목을 더 밝은 색으로 변경 */
-    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4d4d4d}
+    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#5a5a5a}
     
     body.dark{background:var(--bg);color:#efefef}
     body.dark nav{background:var(--sidebar);border-color:#4a4a4a}
@@ -65,7 +64,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.1.2.</h2>
+        <h2>Notepad v1.1.3.</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">⬅</button>
           <button class="small" id="btnNewFile">+ 파일</button>
@@ -153,9 +152,11 @@ function allowDrop(e){ e.preventDefault(); e.currentTarget.classList.add('drop-t
 function onContainerDragLeave(e) { e.currentTarget.classList.remove('drop-target'); }
 function onDragStart(ev, id, type){ dragId = id; dragType = type; ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
 
-// 1. 오류 수정: 드래그 상태를 정리하는 중앙 함수
 function cleanupDragState() {
-    document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+    // Timeout을 주어 브라우저가 다른 이벤트를 처리할 시간을 번 후, 점선을 제거합니다.
+    setTimeout(() => {
+        document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+    }, 50);
     dragId = null;
     dragType = null;
 }
@@ -324,7 +325,6 @@ function updateBookmarkButtonState() { const btn = document.getElementById('btnB
 function doCmd(cmd, val=null){ document.execCommand(cmd, false, val); }
 let dark=false; function applyDark(d){ dark = !!d; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); localStorage.setItem('wn_dark', dark? '1':'0'); }
 
-// 1. 오류 수정: 드래그 종료 시 점선 테두리를 확실하게 제거하는 이벤트 리스너
 window.addEventListener('dragend', cleanupDragState);
 
 if(localStorage.getItem('wn_dark')==='1') applyDark(true);
