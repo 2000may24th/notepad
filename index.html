@@ -48,7 +48,10 @@
     .github-icon{width:20px;height:20px;vertical-align:middle}
     .drop-target{outline:2px dashed var(--accent)}
     .folder-children{margin-left:12px;margin-top:6px}
-    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4a4a4a}
+
+    /* 3. 오류 수정: 다크모드 활성 항목 배경색 명암비 강화 */
+    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#55585c}
+    
     body.dark{background:var(--bg);color:#efefef}
     body.dark nav{background:var(--sidebar);border-color:#4a4a4a}
     body.dark .file-item, body.dark .folder{background:var(--card);border-color:#4a4a4a}
@@ -63,7 +66,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>메모 v1.0.7</h2>
+        <h2>Notepad v1.0.8.</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">⬅</button>
           <button class="small" id="btnNewFile">+ 파일</button>
@@ -216,64 +219,46 @@ function render(){ renderFolders(); renderFiles(); updateBookmarkButtonState(); 
 
 function renderFileItem(file) {
     const starIcon = file.star ? '⭐' : '';
+    // 1. 오류 수정: onchange 핸들러에 이벤트 전파 중단(stopPropagation) 추가
     return `<div class="meta">
                 <div class="name">${starIcon} ${escapeHtml(file.name)}</div>
                 <div class="sub">${new Date(file.updated).toLocaleString('ko-KR', {dateStyle: 'short', timeStyle: 'short'})}</div>
             </div>
             <div class="actions">
-                <input type="checkbox" onchange="toggleSelect(event,'${file.id}')" ${selectedFiles.has(file.id)?'checked':''}>
+                <input type="checkbox" onchange="event.stopPropagation(); toggleSelect(event,'${file.id}')" ${selectedFiles.has(file.id)?'checked':''}>
             </div>`;
 }
 
-// ### 1. & 2. 오류 수정: 이 함수 내부의 로직을 수정했습니다. ###
 function renderFolders(){
   const cont = document.getElementById('folders');
   cont.innerHTML='';
   const order = db.folderOrder || [];
   const currentFile = db.files[currentFileId];
-
   order.forEach(fid=>{
     const f = db.folders[fid];
     if(!f) return;
-
-    // 폴더 엘리먼트 생성
     const el = document.createElement('div');
-    el.className='folder';
-    el.draggable = true;
-    el.dataset.id = f.id;
+    el.className='folder'; el.draggable = true; el.dataset.id = f.id;
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')">▸</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">📁 ${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder');
     el.ondragover = allowDrop;
     el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target');
-    el.ondrop = (ev) => {
-        if (dragType === 'file') onFolderDrop(ev, f.id);
-        else onDrop(ev, f.id);
-    };
-
-    // 폴더 내 파일들을 담을 컨테이너 생성
+    el.ondrop = (ev) => { if (dragType === 'file') onFolderDrop(ev, f.id); else onDrop(ev, f.id); };
     const children = document.createElement('div');
-    children.className = 'folder-children';
-    children.id = 'children-'+f.id;
-    children.style.display = f._open? 'block':'none';
-
-    // 폴더에 속한 파일들 찾아서 children 컨테이너에 추가
+    children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
     Object.values(db.files).forEach(file => {
         if(file.folder === f.id) {
             const fi = document.createElement('div');
-            fi.className='file-item draggable';
-            fi.dataset.id = file.id;
+            fi.className='file-item draggable'; fi.dataset.id = file.id;
             if(file.id === currentFileId) { fi.classList.add('active-file'); }
             fi.innerHTML = renderFileItem(file);
             fi.onclick = ()=>openFile(file.id);
             fi.draggable=true;
             fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file');
-            // 파일 엘리먼트는 children에 추가
             children.appendChild(fi);
         }
     });
-
-    // 최종적으로 폴더와 자식 컨테이너를 DOM에 추가 (한 번만!)
     cont.appendChild(el);
     cont.appendChild(children);
   });
@@ -290,10 +275,9 @@ function renderFiles(){
     if(filter==='star' && !f.star) return;
     if(q && !(f.name.toLowerCase().includes(q) || stripTags(f.content).toLowerCase().includes(q))) return
     const div = document.createElement('div');
-    div.className='file-item draggable';
-    div.dataset.id = f.id;
+    div.className='file-item draggable'; div.dataset.id = f.id;
     if(f.id === currentFileId) { div.classList.add('active-file'); }
-    div.innerHTML = renderFileItem(f); // f -> file 오타 수정
+    div.innerHTML = renderFileItem(f);
     div.onclick = ()=>openFile(f.id);
     div.draggable = true;
     div.ondragstart = (ev)=>onDragStart(ev, f.id, 'file');
@@ -317,7 +301,10 @@ function renameCurrentFileFromInput(){ if(!currentFileId) return; const newName 
 function saveCurrent(){ if(!currentFileId) return alert('먼저 파일을 선택하세요'); const content = document.getElementById('editor').innerHTML; const f = db.files[currentFileId]; f.content = content; f.updated = Date.now(); if(!f.name || f.name==='무제'){ const t = stripTags(content).slice(0,30).trim(); if(t) f.name = t; } saveDB(); render(); const saveBtn = document.getElementById('btnSave'); saveBtn.textContent = '✅ 저장됨'; setTimeout(() => { saveBtn.textContent = '💾 저장'; }, 1500); }
 function deleteFileById(id){ if(!confirm('파일을 삭제할까요?')) return; delete db.files[id]; db.order = db.order.filter(x=>x!==id); if(currentFileId===id){ currentFileId=null; document.getElementById('editor').innerHTML=''; document.getElementById('fileNameInput').value=''; updateStats(); } saveDB(); render(); }
 function deleteCurrentFile(){ if(!currentFileId) return alert('파일 선택'); deleteFileById(currentFileId); }
+
+// 1. 오류 수정: toggleSelect 함수는 그대로 두어도 되지만, 핸들러에서 이벤트 전파를 막는 것이 더 확실합니다.
 function toggleSelect(ev,id){ if(ev.target.checked) selectedFiles.add(id); else selectedFiles.delete(id); }
+
 function downloadTxt(id){ const f=db.files[id]; const blob=new Blob([stripTags(f.content)],{type:'text/plain;charset=utf-8'}); saveAs(blob, (f.name||'untitled')+'.txt'); }
 function downloadDocx(id){ const f = db.files[id]; const html = `<html><body>${f.content||''}</body></html>`; try{ const converted = window.htmlDocx.asBlob(html); saveAs(converted, (f.name||'document') + '.docx'); }catch(e){alert('DOCX 생성 실패: '+e.message)} }
 function downloadPdf(id){ const f=db.files[id]; const { jsPDF } = window.jspdf; const doc = new jsPDF(); const text = stripTags(f.content); const lines = doc.splitTextToSize(text, 180); doc.text(lines,10,10); const blob = doc.output('blob'); saveAs(blob, (f.name||'doc') + '.pdf'); }
@@ -340,9 +327,27 @@ function toggleBookmark() { if (!currentFileId) return alert('파일을 선택�
 function updateBookmarkButtonState() { const btn = document.getElementById('btnBookmark'); if (currentFileId && db.files[currentFileId] && db.files[currentFileId].star) { btn.classList.add('bookmarked'); } else { btn.classList.remove('bookmarked'); }}
 function doCmd(cmd, val=null){ document.execCommand(cmd, false, val); }
 let dark=false; function applyDark(d){ dark = !!d; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); localStorage.setItem('wn_dark', dark? '1':'0'); }
+
+// 2. 오류 수정: 드래그 종료 시 점선 테두리를 확실하게 제거하는 이벤트 리스너 추가
+document.addEventListener('dragend', () => {
+  document.querySelectorAll('.drop-target').forEach(el => {
+    el.classList.remove('drop-target');
+  });
+  dragId = null;
+  dragType = null;
+});
+
 if(localStorage.getItem('wn_dark')==='1') applyDark(true);
-if(db.order && db.order.length) openFile(db.order[0]); else updateStats();
+if(db.order && db.order.length > 0 && db.files[db.order[0]]) {
+    openFile(db.order[0]);
+} else if (Object.keys(db.files).length > 0) {
+    // order 배열이 비어있거나 유효하지 않을 경우, 첫 번째 파일을 엽니다.
+    openFile(Object.keys(db.files)[0]);
+} else {
+    updateStats();
+}
 render();
+
 function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
 function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 형식 선택</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="exportCancel">취소</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportCancel').onclick = closeModal; document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; }
