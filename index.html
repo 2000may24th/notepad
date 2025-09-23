@@ -47,7 +47,7 @@
     .top-right-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
     .btn-action{padding:6px 8px;border-radius:6px}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:200}
-    .modal{background:var(--card);padding:16px;border-radius:8px;width:400px;box-shadow:0 6px 32px rgba(0,0,0,0.15)}
+    .modal{background:var(--card);padding:16px;border-radius:8px;width:400px;box-shadow:0 6px 32px rgba(0,0,0,0.15);overflow-y: auto; max-height: 80vh;}
     #statsFooter{background:var(--bg); border-top:1px solid #e9edf3;padding:6px 12px;display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted); flex-wrap: wrap; flex-shrink: 0; z-index: 100;}
     #statsFooter span { font-weight: 500; color: #444; }
     .drop-target{outline:2px dashed var(--accent)}
@@ -83,6 +83,24 @@
     /* Text formatting toolbar styling */
     #formattingToolbar { display: none; }
     #formattingToolbar.active { display: flex; }
+    
+    .snippet-list { display: flex; flex-direction: column; gap: 8px; }
+    .snippet-item { display: flex; align-items: center; gap: 8px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .snippet-item input[type="text"] { flex-grow: 1; }
+    .snippet-item .snippet-actions { display: flex; gap: 4px; }
+    .snippet-actions button { padding: 4px 8px; font-size: 12px; }
+
+    .modal-tab-container { display: flex; border-bottom: 1px solid #ccc; margin-bottom: 12px; }
+    .modal-tab-button { flex: 1; padding: 10px; text-align: center; cursor: pointer; background: var(--bg); border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; }
+    .modal-tab-button.active { background: var(--card); border-color: #ccc; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .tab-content h4 { margin-top: 0; }
+    
+    .snippet-item-grid { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 10px; padding: 6px; border: 1px solid #eee; border-radius: 4px; }
+    .snippet-item-grid .snippet-key { font-weight: bold; }
+    .snippet-item-grid .snippet-desc { color: var(--muted); }
+    .snippet-item-grid .snippet-actions { display: flex; gap: 4px; }
 
     @media (max-width:800px){
         .app { grid-template-columns: 1fr; }
@@ -100,7 +118,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.2.0</h2>
+        <h2>Notepad v1.3</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">◀</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -183,6 +201,7 @@
           <button id="zoomOutBtn" title="축소">-</button>
           <span id="zoomLevel" style="width: 40px; text-align: center;">100%</span>
           <button id="zoomInBtn" title="확대">+</button>
+          <button id="btnSnippetHelp" title="스니펫 도움말">?</button>
           <button id="fullscreenBtn" title="전체화면" style="font-size: 16px;">⛶</button>
       </div>
   </footer>
@@ -201,13 +220,40 @@ const BASE_FONT_SIZE = 16; // px
 // [FIX] New settings variables
 let enableFormatting = false;
 let preservePasteFormat = false;
+let enableSnippets = false;
+let userSnippets = [];
+
+const presetSnippets = {
+  '//date': { keys: ['//date', '//날짜'], desc: '오늘 날짜 (예: 2025-09-23)', value: () => { const today = new Date(); return today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'); }, enabled: true },
+  '//time': { keys: ['//time', '//시간'], desc: '현재 시간 (예: 13:40)', value: () => { const now = new Date(); return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'); }, enabled: true },
+  '//datetime': { keys: ['//datetime', '//일시'], desc: '날짜 + 시간 (예: 2025-09-23 13:40)', value: () => { const now = new Date(); return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'); }, enabled: true },
+  '//weekday': { keys: ['//weekday', '//요일'], desc: '요일 (예: Tue)', value: () => { const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; return weekdays[new Date().getDay()]; }, enabled: true },
+  '//month': { keys: ['//month'], desc: '현재 달 영문 이름 (예: September)', value: () => { const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']; return months[new Date().getMonth()]; }, enabled: true },
+  '//달': { keys: ['//달'], desc: '현재 달 한글 이름 (예: 9월)', value: () => { const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']; return months[new Date().getMonth()]; }, enabled: true },
+  '//line': { keys: ['//line', '//선'], desc: '---------------------------- (구분선)', value: '----------------------------', enabled: true },
+  '//lines': { keys: ['//lines', '//긴선'], desc: '==================== (구분선)', value: '====================', enabled: true },
+  '//clip': { keys: ['//clip', '//복붙'], desc: '현재 클립보드 내용 삽입', value: async () => { try { const text = await navigator.clipboard.readText(); return text; } catch (err) { console.error('Failed to read clipboard contents: ', err); return ''; } }, enabled: true },
+  '//rand': { keys: ['//rand', '//랜덤'], desc: '무작위 숫자(예: 1~100)', value: () => Math.floor(Math.random() * 100) + 1, enabled: true },
+  '//lotto': { keys: ['//lotto', '//로또'], desc: '로또 번호(1~45) 6개 랜덤 생성', value: () => { const numbers = new Set(); while (numbers.size < 6) { numbers.add(Math.floor(Math.random() * 45) + 1); } return [...numbers].sort((a, b) => a - b).join(', '); }, enabled: true },
+  '//w': { keys: ['//w', '//상'], desc: '↑', value: '↑', enabled: true },
+  '//s': { keys: ['//s', '//하'], desc: '↓', value: '↓', enabled: true },
+  '//a': { keys: ['//a', '//좌'], desc: '←', value: '←', enabled: true },
+  '//d': { keys: ['//d', '//우'], desc: '→', value: '→', enabled: true },
+  '//ws': { keys: ['//ws', '//상하'], desc: '↕', value: '↕', enabled: true },
+  '//ad': { keys: ['//ad', '//좌우'], desc: '↔', value: '↔', enabled: true },
+  '//yyyymmdd': { keys: ['//yyyymmdd'], desc: '년월일 8자리', value: () => { const d = new Date(); return d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); }, enabled: true },
+  '//yymmdd': { keys: ['//yymmdd'], desc: '년월일 6자리', value: () => { const d = new Date(); return d.getFullYear().toString().slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); }, enabled: true },
+  '//ddmmyy': { keys: ['//ddmmyy'], desc: '일월년 6자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString().slice(2); }, enabled: true },
+  '//ddmmyyyy': { keys: ['//ddmmyyyy'], desc: '일월년 8자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString(); }, enabled: true },
+  '//hhmmss': { keys: ['//hhmmss'], desc: '시분초 6자리', value: () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0'); }, enabled: true },
+  '//계산식': { keys: ['//계산식'], desc: '간단한 사칙연산 계산 (예: //5*10)', value: (expr) => { try { const result = eval(expr.replace(/\*\*/g, 'Math.pow(').replace(/\)/g, ',)')); return isNaN(result) ? '유효하지 않은 수식' : result; } catch (e) { return '계산 오류'; } }, enabled: true },
+};
 
 function loadDB(){ 
   const raw = localStorage.getItem(DB_KEY); 
   if(raw) {
     try{
       const loadedDb = JSON.parse(raw);
-      // Merge with default values if properties are missing
       db = { 
         ...db, 
         ...loadedDb,
@@ -216,19 +262,31 @@ function loadDB(){
         order: loadedDb.order || [],
         folderOrder: loadedDb.folderOrder || []
       };
-      // Load settings
       enableFormatting = loadedDb.settings?.enableFormatting || false;
       preservePasteFormat = loadedDb.settings?.preservePasteFormat || false;
+      enableSnippets = loadedDb.settings?.enableSnippets || false;
+      userSnippets = loadedDb.settings?.userSnippets || [];
+      
+      if(loadedDb.settings && loadedDb.settings.presetSnippets){
+        Object.keys(presetSnippets).forEach(key => {
+          if(loadedDb.settings.presetSnippets[key] !== undefined){
+            presetSnippets[key].enabled = loadedDb.settings.presetSnippets[key];
+          }
+        });
+      }
+
     } catch(e){
       console.error(e);
-      // Reset to default on parse error
       db = {folders: {}, files: {}, order: [], folderOrder: []}; 
     }
   }
 }
 function saveDB(){ 
-  // [FIX] Save settings
-  db.settings = { enableFormatting, preservePasteFormat };
+  const presetState = {};
+  Object.keys(presetSnippets).forEach(key => {
+    presetState[key] = presetSnippets[key].enabled;
+  });
+  db.settings = { enableFormatting, preservePasteFormat, enableSnippets, userSnippets, presetSnippets: presetState };
   localStorage.setItem(DB_KEY, JSON.stringify(db)); 
 }
 function uid(prefix='f'){return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
@@ -296,17 +354,11 @@ function updateLineNumbers() {
   const editor = document.getElementById('editor');
   const lineNumbersEl = document.getElementById('line-numbers');
   
-  // Use a more robust method to count lines, handling empty lines correctly
   const lines = editor.innerText.split('\n');
-  let lineCount = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line !== '' || (i === 0 && lines.length === 1)) {
-        lineCount++;
-    } else if (i < lines.length -1) {
-        // Only count a line if it's not the last empty line from a carriage return.
-        lineCount++;
-    }
+  let lineCount = lines.length;
+  const lastLine = lines[lines.length - 1];
+  if (lastLine.trim() === '' && lines.length > 1) {
+    lineCount--;
   }
 
   const numbersHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>'); 
@@ -334,16 +386,13 @@ function updateStats() {
   const koreanRate = 250; // characters per minute
   const englishRate = 130; // words per minute
   
-  // A simple heuristic to check for Korean characters
   const isKorean = /[가-힣]/.test(text);
   
   let totalTimeInMinutes = 0;
   if (isKorean) {
-      // For Korean, count characters including symbols but excluding spaces
       const koreanChars = text.replace(/[\s\n\r]/g, '');
       totalTimeInMinutes = koreanChars.length / koreanRate;
   } else {
-      // For English or other languages, count words
       totalTimeInMinutes = words / englishRate;
   }
 
@@ -383,6 +432,67 @@ editorEl.addEventListener('paste', e => {
   }
 });
 
+editorEl.addEventListener('keydown', async (e) => {
+  if (!enableSnippets || e.key !== 'Enter') return;
+  
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    const textNode = range.startContainer;
+    if (textNode.nodeType === Node.TEXT_NODE) {
+      const text = textNode.textContent;
+      const cursorPosition = range.startOffset;
+      const lastLine = text.substring(0, cursorPosition);
+      
+      let replacement = '';
+      
+      // Check for calculator first
+      const calcMatch = lastLine.match(/\/\/(.*)$/);
+      if (calcMatch && presetSnippets['//계산식'].enabled) {
+        e.preventDefault();
+        const expr = calcMatch[1].trim();
+        const calculatorFunction = presetSnippets['//계산식'].value;
+        const result = calculatorFunction(expr);
+        replacement = String(result);
+        
+        const newText = lastLine.substring(0, lastLine.length - calcMatch[0].length) + replacement;
+        textNode.textContent = newText;
+        range.setStart(textNode, newText.length);
+        range.collapse(true);
+        return;
+      }
+
+      // Check for other snippets
+      const snippetKeys = Object.values(presetSnippets)
+        .filter(s => s.enabled)
+        .flatMap(s => s.keys);
+      
+      const userSnippetTriggers = userSnippets.filter(s => s.enabled).map(s => s.trigger);
+      
+      const allTriggers = [...snippetKeys, ...userSnippetTriggers];
+      const snippetToInsert = allTriggers.find(trigger => lastLine.endsWith(trigger));
+
+      if (snippetToInsert) {
+        e.preventDefault();
+        const preset = Object.values(presetSnippets).find(s => s.keys.includes(snippetToInsert));
+        const user = userSnippets.find(s => s.trigger === snippetToInsert);
+        const snippetValue = (preset) ? preset.value : user.value;
+        
+        if (typeof snippetValue === 'function') {
+          replacement = await snippetValue();
+        } else {
+          replacement = snippetValue;
+        }
+
+        const newText = lastLine.substring(0, lastLine.length - snippetToInsert.length) + replacement;
+        textNode.textContent = newText + text.substring(cursorPosition);
+        range.setStart(textNode, newText.length);
+        range.collapse(true);
+      }
+    }
+  }
+});
+
 const appRoot = document.getElementById('appRoot'); const toggleSidebarBtn = document.getElementById('toggleSidebarBtn'); const expandHandle = document.getElementById('expandHandle');
 function toggleSidebar() { const isHidden = appRoot.classList.toggle('sidebar-hidden'); toggleSidebarBtn.textContent = isHidden ? '▶' : '◀'; toggleSidebarBtn.title = isHidden ? '사이드바 펼치기' : '사이드바 숨기기'; }
 toggleSidebarBtn.addEventListener('click', toggleSidebar); expandHandle.addEventListener('click', toggleSidebar);
@@ -402,7 +512,11 @@ function toggleMobileSidebar(forceOpen) {
 document.getElementById('mobileMenuBtn').addEventListener('click', () => toggleMobileSidebar());
 backdrop.addEventListener('click', () => toggleMobileSidebar(false));
 
-document.getElementById('btnSettings').addEventListener('click', ()=>{ openSettingsModal(); }); document.getElementById('btnDeleteFile').onclick = deleteCurrentFile; document.getElementById('btnBookmark').onclick = toggleBookmark; document.getElementById('btnFindReplace').onclick = openFindReplaceModal;
+document.getElementById('btnSettings').addEventListener('click', ()=>{ openMainSettingsModal(); }); 
+document.getElementById('btnSnippetHelp').addEventListener('click', () => { openSnippetModal(); });
+document.getElementById('btnDeleteFile').onclick = deleteCurrentFile; 
+document.getElementById('btnBookmark').onclick = toggleBookmark; 
+document.getElementById('btnFindReplace').onclick = openFindReplaceModal;
 document.getElementById('zoomInBtn').onclick = () => { currentZoom = Math.min(2, currentZoom + 0.1); updateZoom(); }
 document.getElementById('zoomOutBtn').onclick = () => { currentZoom = Math.max(0.5, currentZoom - 0.1); updateZoom(); }
 document.getElementById('fullscreenBtn').onclick = () => { const editorContainer = document.querySelector('.editor-container'); if (!document.fullscreenElement) { editorContainer.requestFullscreen(); } else { document.exitFullscreen(); } }
@@ -493,7 +607,7 @@ function downloadSelectedFormats(fmts) {
 }
 
 function printEditorContent() { if (!currentFileId) return; const printFrame = document.createElement('iframe'); printFrame.style.display = 'none'; document.body.appendChild(printFrame); const content = db.files[currentFileId].content; const doc = printFrame.contentWindow.document; doc.open(); doc.write(`<html><head><title>${escapeHtml(db.files[currentFileId].name)}</title></head><body>${content}</body></html>`); doc.close(); printFrame.contentWindow.focus(); printFrame.contentWindow.print(); setTimeout(() => { document.body.removeChild(printFrame); }, 200); }
-function openSettingsModal(){ 
+function openMainSettingsModal(){ 
   const html = `
     <h3>설정</h3> 
     <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> 
@@ -522,6 +636,14 @@ function openSettingsModal(){
       <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
         클립보드에 저장된 텍스트의 서식을 유지/해제합니다.
       </div>
+      
+      <label style="display:flex; align-items:center; justify-content: space-between;"> 
+        <span>스니펫 기능</span> 
+        <input type="checkbox" id="setting_snippets"> 
+      </label>
+      <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
+        단축키로 텍스트를 자동 변환하는 스니펫 기능을 (비)활성화합니다.
+      </div>
 
       <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> 
       <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th(GitHub)</a></div> 
@@ -533,7 +655,6 @@ function openSettingsModal(){
   `; 
   openModal(html); 
 
-  // [FIX] Set initial state and add listeners for new settings
   document.getElementById('setting_dark').checked = dark; 
   document.getElementById('setting_dark').onchange = (e) => { 
     applyDark(e.target.checked); 
@@ -551,10 +672,123 @@ function openSettingsModal(){
     preservePasteFormat = e.target.checked;
     saveDB();
   };
-
+  
+  document.getElementById('setting_snippets').checked = enableSnippets;
+  document.getElementById('setting_snippets').onchange = (e) => {
+    enableSnippets = e.target.checked;
+    saveDB();
+  };
+  
   document.getElementById('resetAll').onclick = resetAllData; 
   document.getElementById('setting_close').onclick = closeModal; 
 }
+
+function openSnippetModal(){ 
+  const html = `
+    <h3>스니펫 관리</h3>
+    <div class="modal-tab-container">
+      <button id="preset-tab-btn" class="modal-tab-button active">프리셋</button>
+      <button id="custom-tab-btn" class="modal-tab-button">커스텀</button>
+    </div>
+    
+    <div id="preset-snippets-tab" class="tab-content active">
+      <h4>기본 제공 스니펫</h4>
+      <div id="preset-snippets-list" class="snippet-list"></div>
+    </div>
+
+    <div id="custom-snippets-tab" class="tab-content">
+      <h4>사용자 지정 스니펫</h4>
+      <div id="user-snippets-list" class="snippet-list"></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 6px; border: 1px dashed #ddd; border-radius: 4px;">
+        <input type="text" id="new-snippet-trigger" placeholder="키 (예: //hello)">
+        <input type="text" id="new-snippet-value" placeholder="값 (예: 안녕하세요)">
+        <button id="add-snippet-btn">추가</button>
+      </div>
+    </div>
+    
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> 
+      <button id="snippet_close">닫기</button> 
+    </div> 
+  `;
+  openModal(html);
+  
+  document.getElementById('preset-tab-btn').addEventListener('click', () => switchTab('preset'));
+  document.getElementById('custom-tab-btn').addEventListener('click', () => switchTab('custom'));
+  
+  document.getElementById('snippet_close').onclick = closeModal;
+  
+  function switchTab(tabId) {
+    document.querySelectorAll('.modal-tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    document.getElementById(tabId + '-tab-btn').classList.add('active');
+    document.getElementById(tabId + '-snippets-tab').classList.add('active');
+  }
+
+  renderPresetSnippets();
+  renderUserSnippets();
+  
+  document.getElementById('add-snippet-btn').onclick = () => {
+    const trigger = document.getElementById('new-snippet-trigger').value.trim();
+    const value = document.getElementById('new-snippet-value').value.trim();
+    if (trigger && value) {
+      userSnippets.push({ trigger, value, enabled: true });
+      document.getElementById('new-snippet-trigger').value = '';
+      document.getElementById('new-snippet-value').value = '';
+      saveDB();
+      renderUserSnippets();
+    }
+  };
+
+  function renderPresetSnippets() {
+    const list = document.getElementById('preset-snippets-list');
+    list.innerHTML = '';
+    
+    Object.keys(presetSnippets).forEach(key => {
+      const snippet = presetSnippets[key];
+      const item = document.createElement('div');
+      item.className = 'snippet-item-grid';
+      item.innerHTML = `
+        <div class="snippet-key">${escapeHtml(snippet.keys.join(', '))}</div>
+        <div class="snippet-desc">${escapeHtml(snippet.desc)}</div>
+        <input type="checkbox" data-trigger="${key}" ${snippet.enabled ? 'checked' : ''}>
+      `;
+      item.querySelector('input[type="checkbox"]').addEventListener('change', (e) => {
+        snippet.enabled = e.target.checked;
+        saveDB();
+      });
+      list.appendChild(item);
+    });
+  }
+
+  function renderUserSnippets() {
+    const list = document.getElementById('user-snippets-list');
+    list.innerHTML = '';
+    userSnippets.forEach((snippet, index) => {
+      const item = document.createElement('div');
+      item.className = 'snippet-item-grid';
+      item.innerHTML = `
+        <div class="snippet-key">${escapeHtml(snippet.trigger)}</div>
+        <div class="snippet-desc">${escapeHtml(snippet.value)}</div>
+        <div class="snippet-actions">
+          <input type="checkbox" data-index="${index}" ${snippet.enabled ? 'checked' : ''}>
+          <button data-index="${index}" class="delete-snippet-btn">삭제</button>
+        </div>
+      `;
+      item.querySelector('input[type="checkbox"]').addEventListener('change', (e) => {
+        userSnippets[index].enabled = e.target.checked;
+        saveDB();
+      });
+      item.querySelector('.delete-snippet-btn').addEventListener('click', () => {
+        userSnippets.splice(index, 1);
+        saveDB();
+        renderUserSnippets();
+      });
+      list.appendChild(item);
+    });
+  }
+}
+
 function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameDisplay').textContent = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
 function openFindReplaceModal() { if (!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>찾기/바꾸기</h3><div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;"><input type="text" id="find-query" placeholder="찾을 내용" style="width: 100%;"><input type="text" id="replace-query" placeholder="바꿀 내용" style="width: 100%;"></div><div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;"><button id="find-btn">찾기</button><button id="replace-btn">바꾸기</button><button id="replace-all-btn">모두 바꾸기</button><button id="find-close-btn">닫기</button></div>`; openModal(html); const findInput = document.getElementById('find-query'); const replaceInput = document.getElementById('replace-query'); document.getElementById('find-btn').onclick = () => { const query = findInput.value; if (query && !window.find(query, false, false, true, false, true, false)) { alert('더 이상 찾는 내용이 없습니다.'); } }; document.getElementById('replace-btn').onclick = () => { const selection = window.getSelection(); if (selection.rangeCount > 0) { document.execCommand('insertText', false, replaceInput.value); } }; document.getElementById('replace-all-btn').onclick = () => { const findQuery = findInput.value; const replaceQuery = replaceInput.value; if (!findQuery) return; const editor = document.getElementById('editor'); let content = editor.innerHTML; const originalContent = content; content = content.replaceAll(findQuery, replaceQuery); if (originalContent !== content) { editor.innerHTML = content; saveCurrent(); alert('모든 항목을 바꿨습니다.'); }}; document.getElementById('find-close-btn').onclick = closeModal; }
 
