@@ -80,6 +80,10 @@
     body.editor-fullscreen main.editor-wrap { padding: 0; height: 100%; }
     body.editor-fullscreen .editor-container { height: 100%; border: 0; border-radius: 0; }
 
+    /* Text formatting toolbar styling */
+    #formattingToolbar { display: none; }
+    #formattingToolbar.active { display: flex; }
+
     @media (max-width:800px){
         .app { grid-template-columns: 1fr; }
         .app.sidebar-hidden .toolbar { padding-left: 0; }
@@ -135,13 +139,18 @@
           <h3 id="fileNameDisplay" style="margin: 0; font-size: 16px; font-weight: 600;"></h3>
           <button id="btnRenameFile" class="btn-action">변경</button>
         </div>
-        <div class="group">
+        <!-- [FIX] New formatting toolbar -->
+        <div class="group" id="formattingToolbar">
           <button onclick="doCmd('bold')"><b>B</b></button>
           <button onclick="doCmd('italic')"><i>I</i></button>
           <button onclick="doCmd('underline')"><u>U</u></button>
           <button onclick="doCmd('strikeThrough')">S</button>
-          <input type="color" id="colorPick" title="색상" onchange="doCmd('foreColor', this.value)">
-          <select id="fontSize" onchange="doCmd('fontSize', this.value)"><option value="3">기본</option><option value="4">크게</option><option value="5">더 크게</option></select>
+          <input type="color" id="colorPick" title="색상">
+          <select id="fontSize">
+            <option value="3">기본</option>
+            <option value="4">크게</option>
+            <option value="5">더 크게</option>
+          </select>
         </div>
         <div class="group">
             <button id="btnSave" class="btn-action">저장</button>
@@ -188,8 +197,39 @@ let currentFileId = null;
 let currentZoom = 1;
 const BASE_FONT_SIZE = 16; // px
 
-function loadDB(){ const raw = localStorage.getItem(DB_KEY); if(raw) try{db = JSON.parse(raw)}catch(e){console.error(e)} if(!db.files || !db.order || !db.folderOrder) db = {folders: {}, files: {}, order: [], folderOrder: []}; }
-function saveDB(){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+// [FIX] New settings variables
+let enableFormatting = false;
+let preservePasteFormat = false;
+
+function loadDB(){ 
+  const raw = localStorage.getItem(DB_KEY); 
+  if(raw) {
+    try{
+      const loadedDb = JSON.parse(raw);
+      // Merge with default values if properties are missing
+      db = { 
+        ...db, 
+        ...loadedDb,
+        folders: loadedDb.folders || {},
+        files: loadedDb.files || {},
+        order: loadedDb.order || [],
+        folderOrder: loadedDb.folderOrder || []
+      };
+      // Load settings
+      enableFormatting = loadedDb.settings?.enableFormatting || false;
+      preservePasteFormat = loadedDb.settings?.preservePasteFormat || false;
+    } catch(e){
+      console.error(e);
+      // Reset to default on parse error
+      db = {folders: {}, files: {}, order: [], folderOrder: []}; 
+    }
+  }
+}
+function saveDB(){ 
+  // [FIX] Save settings
+  db.settings = { enableFormatting, preservePasteFormat };
+  localStorage.setItem(DB_KEY, JSON.stringify(db)); 
+}
 function uid(prefix='f'){return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
 loadDB();
 if(Object.keys(db.files).length===0){ const id = uid(); db.files[id] = {id,name:'새 문서',content:'',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB();}
@@ -206,7 +246,7 @@ function onFolderDrop(ev, folderId){ ev.preventDefault(); ev.stopPropagation(); 
 function reorderFile(dragIdLocal, targetId){ const idx = db.order.indexOf(dragIdLocal); if(idx>-1) db.order.splice(idx,1); if(targetId){ const ti = db.order.indexOf(targetId); db.order.splice(ti,0,dragIdLocal); } else { db.order.push(dragIdLocal); } saveDB();}
 function reorderFolder(dragIdLocal, targetId){ const arr = db.folderOrder; const idx = arr.indexOf(dragIdLocal); if(idx>-1) arr.splice(idx,1); if(targetId){ const ti = arr.indexOf(targetId); arr.splice(ti,0,dragIdLocal); } else { arr.push(dragIdLocal); } db.folderOrder = arr; saveDB();}
 
-function render(){ renderFolders(); renderFiles(); updateBookmarkButtonState(); }
+function render(){ renderFolders(); renderFiles(); updateBookmarkButtonState(); updateFormattingToolbar();}
 function renderFileItem(file) { const starIcon = file.star ? '⭐' : ''; return `<div class="meta"><div class="name">${starIcon} ${escapeHtml(file.name)}</div><div class="sub">${new Date(file.updated).toLocaleString('ko-KR', {dateStyle: 'short', timeStyle: 'short'})}</div></div><div class="actions"><input type="checkbox" onchange="toggleSelect(event,'${file.id}')" ${selectedFiles.has(file.id)?'checked':''}></div>`;}
 function renderFolders(){
   const cont = document.getElementById('folders'); cont.innerHTML=''; const order = db.folderOrder || []; const currentFile = db.files[currentFileId];
@@ -250,18 +290,56 @@ const fileInput = document.getElementById('fileInput'); fileInput.addEventListen
 function mergeSelected(){ if(selectedFiles.size<2) return alert('두 개 이상의 파일을 선택하세요'); const ids = Array.from(selectedFiles); let merged=''; let name='병합문서'; ids.forEach(id=>{const f=db.files[id]; merged += `<h3>${escapeHtml(f.name)}</h3>` + (f.content||'') + '<hr>';}); const id = uid(); db.files[id]={id,name: name,content:merged,folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); selectedFiles.clear(); }
 function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 파일이 없습니다'); if(!confirm('선택된 파일을 삭제할까요?')) return; selectedFiles.forEach(id=>{delete db.files[id]; db.order = db.order.filter(x=>x!==id)}); saveDB(); render(); selectedFiles.clear(); }
 
-function updateLineNumbers() { const editor = document.getElementById('editor'); const lineNumbersEl = document.getElementById('line-numbers'); const lines = editor.getElementsByTagName('div'); let lineCount = lines.length; if (lineCount === 0 && editor.innerText.length > 0) lineCount = 1; else if (editor.innerText.trim() === '') lineCount = 1; const numbersHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>'); lineNumbersEl.innerHTML = numbersHTML; lineNumbersEl.scrollTop = editor.scrollTop; return lineCount; }
-function updateStats() { const editor = document.getElementById('editor'); const text = editor.innerText || ''; const html = editor.innerHTML || ''; document.getElementById('statChars').textContent = text.length.toLocaleString(); document.getElementById('statCharsNoSpace').textContent = text.replace(/\s/g, '').length.toLocaleString(); document.getElementById('statWords').textContent = (text.match(/\S+/g) || []).length.toLocaleString(); document.getElementById('statParagraphs').textContent = text.split('\n').filter(line => line.trim() !== '').length.toLocaleString(); const sizeInBytes = new Blob([html]).size; let size = `${sizeInBytes} B`; if (sizeInBytes >= 1024 * 1024) size = `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`; else if (sizeInBytes >= 1024) size = `${(sizeInBytes / 1024).toFixed(1)} KB`; document.getElementById('statSize').textContent = size; const lineCount = updateLineNumbers(); document.getElementById('statLines').textContent = lineCount.toLocaleString(); }
+// [FIX] Correct line number counting
+function updateLineNumbers() { 
+  const editor = document.getElementById('editor');
+  const lineNumbersEl = document.getElementById('line-numbers');
+  const lines = editor.innerText.split('\n');
+  let lineCount = lines.length;
+  // If the last line is empty and not the only line, don't count it.
+  if (lineCount > 1 && lines[lines.length - 1].trim() === '') {
+      lineCount--;
+  }
+  const numbersHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>'); 
+  lineNumbersEl.innerHTML = numbersHTML; 
+  lineNumbersEl.scrollTop = editor.scrollTop;
+  return lineCount;
+}
+function updateStats() { 
+  const editor = document.getElementById('editor'); 
+  const text = editor.innerText || ''; 
+  const html = editor.innerHTML || ''; 
+  document.getElementById('statChars').textContent = text.length.toLocaleString(); 
+  document.getElementById('statCharsNoSpace').textContent = text.replace(/\s/g, '').length.toLocaleString(); 
+  document.getElementById('statWords').textContent = (text.match(/\S+/g) || []).length.toLocaleString(); 
+  document.getElementById('statParagraphs').textContent = (text.split('\n').filter(line => line.trim() !== '')).length.toLocaleString(); 
+  const sizeInBytes = new Blob([html]).size; 
+  let size = `${sizeInBytes} B`; 
+  if (sizeInBytes >= 1024 * 1024) size = `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`; 
+  else if (sizeInBytes >= 1024) size = `${(sizeInBytes / 1024).toFixed(1)} KB`; 
+  document.getElementById('statSize').textContent = size; 
+  const lineCount = updateLineNumbers(); 
+  document.getElementById('statLines').textContent = lineCount.toLocaleString(); 
+}
 
 document.getElementById('btnNewFile').onclick = newFile; document.getElementById('btnNewFolder').onclick = newFolder; document.getElementById('btnRenameFile').onclick = renameCurrentFile; document.getElementById('search').addEventListener('input', render); document.getElementById('filter').addEventListener('change', render); document.getElementById('btnSave').onclick = saveCurrent; document.getElementById('btnExport').onclick = ()=>{ openSaveExportModal(); }; document.getElementById('btnMerge').onclick = mergeSelected; document.getElementById('btnDeleteSelected').onclick = deleteSelected;
 const autoSaveCb = document.getElementById('autoSave'); autoSaveCb.addEventListener('change', ()=>{ if(autoSaveCb.checked) startAutoSave(); else stopAutoSave();});
 let autoSaveTimer=null;
 function startAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer = setInterval(()=>{ if(currentFileId) saveCurrent(); }, 3000);} function stopAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer=null}
-document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); saveCurrent(); } if((e.ctrlKey||e.metaKey) && e.key==='b'){ e.preventDefault(); doCmd('bold'); }});
+document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); saveCurrent(); } if((e.ctrlKey||e.metaKey) && e.key==='b'){ e.preventDefault(); if (enableFormatting) doCmd('bold'); }});
 const editorEl = document.getElementById('editor');
 editorEl.addEventListener('input', ()=>{ if(currentFileId) { db.files[currentFileId].updated=Date.now(); } updateStats(); });
 editorEl.addEventListener('scroll', () => { document.getElementById('line-numbers').scrollTop = editorEl.scrollTop; });
-editorEl.addEventListener('paste', e => { e.preventDefault(); const text = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, text); });
+
+// [FIX] Paste functionality based on setting
+editorEl.addEventListener('paste', e => { 
+  if (!preservePasteFormat) {
+    e.preventDefault(); 
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain'); 
+    document.execCommand('insertText', false, text); 
+  }
+});
+
 const appRoot = document.getElementById('appRoot'); const toggleSidebarBtn = document.getElementById('toggleSidebarBtn'); const expandHandle = document.getElementById('expandHandle');
 function toggleSidebar() { const isHidden = appRoot.classList.toggle('sidebar-hidden'); toggleSidebarBtn.textContent = isHidden ? '▶' : '◀'; toggleSidebarBtn.title = isHidden ? '사이드바 펼치기' : '사이드바 숨기기'; }
 toggleSidebarBtn.addEventListener('click', toggleSidebar); expandHandle.addEventListener('click', toggleSidebar);
@@ -290,7 +368,26 @@ function updateZoom() { const newSize = BASE_FONT_SIZE * currentZoom; editorEl.s
 
 function toggleBookmark() { if (!currentFileId) return alert('파일을 선택하세요'); const file = db.files[currentFileId]; file.star = !file.star; file.updated = Date.now(); saveDB(); render(); }
 function updateBookmarkButtonState() { const btn = document.getElementById('btnBookmark'); if (currentFileId && db.files[currentFileId] && db.files[currentFileId].star) { btn.classList.add('bookmarked'); } else { btn.classList.remove('bookmarked'); }}
-function doCmd(cmd, val=null){ document.execCommand(cmd, false, val); }
+
+// [FIX] New doCmd function that checks for formatting toggle
+function doCmd(cmd, val = null){ 
+  if (enableFormatting) {
+    document.execCommand(cmd, false, val); 
+  } else {
+    // Show a message or do nothing if formatting is disabled
+    console.log("Formatting is currently disabled.");
+  }
+}
+
+// [FIX] Event listeners for formatting toolbar
+document.getElementById('fontSize').addEventListener('change', (e) => {
+    doCmd('fontSize', e.target.value);
+});
+document.getElementById('colorPick').addEventListener('change', (e) => {
+    doCmd('foreColor', e.target.value);
+});
+
+
 let dark=false; function applyDark(d){ dark = !!d; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); localStorage.setItem('wn_dark', dark? '1':'0'); }
 window.addEventListener('dragend', cleanupDragState);
 if(localStorage.getItem('wn_dark')==='1') applyDark(true);
@@ -353,9 +450,78 @@ function downloadSelectedFormats(fmts) {
 }
 
 function printEditorContent() { if (!currentFileId) return; const printFrame = document.createElement('iframe'); printFrame.style.display = 'none'; document.body.appendChild(printFrame); const content = db.files[currentFileId].content; const doc = printFrame.contentWindow.document; doc.open(); doc.write(`<html><head><title>${escapeHtml(db.files[currentFileId].name)}</title></head><body>${content}</body></html>`); doc.close(); printFrame.contentWindow.focus(); printFrame.contentWindow.print(); setTimeout(() => { document.body.removeChild(printFrame); }, 200); }
-function openSettingsModal(){ const html = `<h3>설정</h3> <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> <label style="display:flex; align-items:center; justify-content: space-between;"> <span>다크모드 사용</span> <input type="checkbox" id="setting_dark"> </label> <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th (GitHub)</a></div> <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 데이터 초기화</button> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="setting_close">닫기</button> </div> </div>`; openModal(html); document.getElementById('setting_dark').checked = dark; document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); }; document.getElementById('resetAll').onclick = resetAllData; document.getElementById('setting_close').onclick = closeModal; }
+function openSettingsModal(){ 
+  const html = `
+    <h3>설정</h3> 
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> 
+      <label style="display:flex; align-items:center; justify-content: space-between;"> 
+        <span>다크모드 사용</span> 
+        <input type="checkbox" id="setting_dark"> 
+      </label> 
+      <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> 
+      
+      <!-- [FIX] New settings toggles -->
+      <label style="display:flex; align-items:center; justify-content: space-between;"> 
+        <span>텍스트 서식 토글</span> 
+        <input type="checkbox" id="setting_formatting"> 
+      </label>
+      <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
+        텍스트에 밑줄, 굵기, 색상 등을 적용하는 토글을 (비)활성화합니다.
+      </div>
+      
+      <label style="display:flex; align-items:center; justify-content: space-between;"> 
+        <span>붙여넣기 한 서식 유지</span> 
+        <input type="checkbox" id="setting_paste_format"> 
+      </label>
+      <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
+        클립보드에 저장된 텍스트의 서식을 유지/해제합니다.
+      </div>
+
+      <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> 
+      <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th (GitHub)</a></div> 
+      <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 데이터 초기화</button> 
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> 
+        <button id="setting_close">닫기</button> 
+      </div> 
+    </div>
+  `; 
+  openModal(html); 
+
+  // [FIX] Set initial state and add listeners for new settings
+  document.getElementById('setting_dark').checked = dark; 
+  document.getElementById('setting_dark').onchange = (e) => { 
+    applyDark(e.target.checked); 
+  };
+  
+  document.getElementById('setting_formatting').checked = enableFormatting;
+  document.getElementById('setting_formatting').onchange = (e) => {
+    enableFormatting = e.target.checked;
+    saveDB();
+    updateFormattingToolbar();
+  };
+
+  document.getElementById('setting_paste_format').checked = preservePasteFormat;
+  document.getElementById('setting_paste_format').onchange = (e) => {
+    preservePasteFormat = e.target.checked;
+    saveDB();
+  };
+
+  document.getElementById('resetAll').onclick = resetAllData; 
+  document.getElementById('setting_close').onclick = closeModal; 
+}
 function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameDisplay').textContent = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
 function openFindReplaceModal() { if (!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>찾기/바꾸기</h3><div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;"><input type="text" id="find-query" placeholder="찾을 내용" style="width: 100%;"><input type="text" id="replace-query" placeholder="바꿀 내용" style="width: 100%;"></div><div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;"><button id="find-btn">찾기</button><button id="replace-btn">바꾸기</button><button id="replace-all-btn">모두 바꾸기</button><button id="find-close-btn">닫기</button></div>`; openModal(html); const findInput = document.getElementById('find-query'); const replaceInput = document.getElementById('replace-query'); document.getElementById('find-btn').onclick = () => { const query = findInput.value; if (query && !window.find(query, false, false, true, false, true, false)) { alert('더 이상 찾는 내용이 없습니다.'); } }; document.getElementById('replace-btn').onclick = () => { const selection = window.getSelection(); if (selection.rangeCount > 0) { document.execCommand('insertText', false, replaceInput.value); } }; document.getElementById('replace-all-btn').onclick = () => { const findQuery = findInput.value; const replaceQuery = replaceInput.value; if (!findQuery) return; const editor = document.getElementById('editor'); let content = editor.innerHTML; const originalContent = content; content = content.replaceAll(findQuery, replaceQuery); if (originalContent !== content) { editor.innerHTML = content; saveCurrent(); alert('모든 항목을 바꿨습니다.'); }}; document.getElementById('find-close-btn').onclick = closeModal; }
+
+// [FIX] New function to update toolbar visibility
+function updateFormattingToolbar() {
+  const toolbar = document.getElementById('formattingToolbar');
+  if (enableFormatting) {
+    toolbar.classList.add('active');
+  } else {
+    toolbar.classList.remove('active');
+  }
+}
+
 </script>
 </body>
 </html>
