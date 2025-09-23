@@ -115,7 +115,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.5.0</h2>
+        <h2>Notepad v1.5</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">◀</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -255,7 +255,7 @@ function loadDB(){
       };
       for(const folderId in db.folders) {
         if (!db.folders[folderId].fileOrder) {
-            db.folders[folderId].fileOrder = [];
+            db.folders[folderId].fileOrder = Object.keys(db.files).filter(fid => db.files[fid].folder === folderId);
         }
       }
       enableFormatting = loadedDb.settings?.enableFormatting || false;
@@ -296,50 +296,65 @@ function onContainerDragLeave(e) { e.currentTarget.classList.remove('drop-target
 function onDragStart(ev, id, type){ dragId = id; dragType = type; ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
 function cleanupDragState() { document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); dragId = null; dragType = null;}
 
-function reorderFile(draggedId, targetId, folderId = null) {
-    const sourceList = folderId ? db.folders[folderId].fileOrder : db.order;
-    const targetList = folderId ? db.folders[folderId].fileOrder : db.order;
+function onDrop(ev, targetId) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    
+    // Case 1: Dropping a file onto a folder element.
+    if (dragType === 'file' && db.folders[targetId]) {
+        const folderId = targetId;
+        const file = db.files[dragId];
 
-    const dragIndex = sourceList.indexOf(draggedId);
-    if (dragIndex > -1) {
-        sourceList.splice(dragIndex, 1);
-    }
+        if (file.folder === folderId) {
+             cleanupDragState();
+             return;
+        }
 
-    if (targetId) {
-        const targetIndex = targetList.indexOf(targetId);
-        targetList.splice(targetIndex, 0, draggedId);
-    } else {
-        targetList.push(draggedId);
-    }
-}
-
-function onDrop(ev, targetId) { 
-    ev.preventDefault(); 
-    ev.stopPropagation(); 
-    const targetFile = db.files[targetId];
-    const draggedFile = db.files[dragId];
-
-    if (dragType === 'file' && draggedFile) {
-        if(draggedFile.folder) {
-            const folder = db.folders[draggedFile.folder];
-            folder.fileOrder = folder.fileOrder.filter(id => id !== dragId);
+        if (file.folder) {
+            const oldFolder = db.folders[file.folder];
+            if (oldFolder && oldFolder.fileOrder) {
+                oldFolder.fileOrder = oldFolder.fileOrder.filter(id => id !== dragId);
+            }
         } else {
             db.order = db.order.filter(id => id !== dragId);
         }
-        
-        draggedFile.folder = targetFile ? targetFile.folder : null;
 
-        if (targetFile && targetFile.folder) {
-            reorderFile(dragId, targetId, targetFile.folder);
+        file.folder = folderId;
+        file.updated = Date.now();
+
+        const targetFolder = db.folders[folderId];
+        if (!targetFolder.fileOrder) targetFolder.fileOrder = [];
+        if (!targetFolder.fileOrder.includes(dragId)) targetFolder.fileOrder.push(dragId);
+        
+        saveDB();
+        render();
+        cleanupDragState();
+        return;
+    }
+
+    const targetFile = db.files[targetId];
+    const draggedFile = db.files[dragId];
+
+    // Case 2: Reordering files
+    if (dragType === 'file' && draggedFile && targetFile) {
+        if(draggedFile.folder) {
+            const folder = db.folders[draggedFile.folder];
+            if (folder && folder.fileOrder) {
+                folder.fileOrder = folder.fileOrder.filter(id => id !== dragId);
+            }
         } else {
-            reorderFile(dragId, targetId, null);
+            db.order = db.order.filter(id => id !== dragId);
         }
 
+        draggedFile.folder = targetFile.folder;
+        reorderFile(dragId, targetId, targetFile.folder);
+    
+    // Case 3: Reordering folders
     } else if (dragType === 'folder') {
         const arr = db.folderOrder; 
         const idx = arr.indexOf(dragId); 
         if(idx>-1) arr.splice(idx,1); 
-        if(targetId){ 
+        if(targetId && db.folders[targetId]){ 
             const ti = arr.indexOf(targetId); 
             arr.splice(ti,0,dragId); 
         } else { 
@@ -347,10 +362,26 @@ function onDrop(ev, targetId) {
         } 
         db.folderOrder = arr; 
     }
+
     saveDB(); 
     render(); 
     cleanupDragState();
 }
+
+function reorderFile(draggedId, targetId, folderId = null) {
+    const list = folderId ? db.folders[folderId].fileOrder : db.order;
+    const dragIndex = list.indexOf(draggedId);
+    if(dragIndex > -1) list.splice(dragIndex, 1);
+
+    if (targetId) {
+        const targetIndex = list.indexOf(targetId);
+        if(targetIndex > -1) list.splice(targetIndex, 0, draggedId);
+        else list.push(draggedId);
+    } else {
+        list.push(draggedId);
+    }
+}
+
 
 function onFileContainerDrop(ev) { 
     ev.preventDefault(); 
@@ -407,7 +438,7 @@ function renderFolders(){
     const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id;
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     const toggleIcon = f._open ? '▾' : '▸';
-    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"handleMobileFileOpen(event, () => openFile('${f.id}'))\">${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
+    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"handleMobileFileOpen(event, () => toggleFolder('${f.id}'))\">${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder'); el.ondragover = allowDrop; el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); el.ondrop = (ev) => onDrop(ev, f.id);
     const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
     
@@ -446,7 +477,7 @@ function stripTags(html){return html.replace(/<[^>]+>/g,'')}
 function newFile(){ const name = prompt('새 파일 이름:'); if(!name || name.trim() === '') return; const id=uid(); db.files[id]={id,name:name.trim(),content:'<div><br></div>',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.unshift(id); saveDB(); render(); openFile(id); }
 function newFolder(){ const name = prompt('폴더 이름:'); if(!name) return; const id=uid('d'); db.folders[id]={id,name, fileOrder:[]}; if(!db.folderOrder) db.folderOrder=[]; db.folderOrder.push(id); saveDB(); render(); }
 function toggleFolder(id){ db.folders[id]._open = !db.folders[id]._open; saveDB(); render(); }
-function openFolder(id){ openFile(id) }
+
 function renameFolder(id){ const name = prompt('새 폴더 이름:', db.folders[id].name); if(!name) return; db.folders[id].name=name; saveDB(); render(); }
 function deleteFolder(id){ if(!confirm('폴더와 그 안의 파일들을 삭제하시겠어요?')) return; Object.values(db.files).forEach(f=>{if(f.folder===id) delete db.files[f.id];}); delete db.folders[id]; db.folderOrder = (db.folderOrder||[]).filter(x=>x!==id); db.order = db.order.filter(x=>db.files[x]); saveDB(); render(); }
 
@@ -1072,3 +1103,5 @@ function updateFormattingToolbar() {
 </script>
 </body>
 </html>
+"
+
