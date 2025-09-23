@@ -110,7 +110,7 @@
       </div>
 
       <div style="margin-top:12px">
-        <div class="section-title">임포트(.txt/.docx/.pdf 지원)</div>
+        <div class="section-title">임포트(.txt/.docx/.pdf)</div>
         <input id="fileInput" type="file" multiple accept=".txt,.md,.html,.docx,.pdf" />
         <div class="section-title" style="margin-top:12px">병합/관리</div>
         <button id="btnMerge">선택 파일 병합</button>
@@ -224,13 +224,7 @@ function renderFiles(){
   })
 }
 
-function handleMobileFileOpen(event, openFn) {
-    openFn();
-    if (window.innerWidth <= 800) {
-        toggleMobileSidebar(false);
-    }
-}
-
+function handleMobileFileOpen(event, openFn) { openFn(); if (window.innerWidth <= 800) { toggleMobileSidebar(false); } }
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c])}
 function stripTags(html){return html.replace(/<[^>]+>/g,'')}
 function newFile(){ const name = prompt('새 파일 이름:'); if(!name || name.trim() === '') return; const id=uid(); db.files[id]={id,name:name.trim(),content:'<div><br></div>',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.unshift(id); saveDB(); render(); openFile(id); }
@@ -255,7 +249,7 @@ function updateStats() { const editor = document.getElementById('editor'); const
 document.getElementById('btnNewFile').onclick = newFile; document.getElementById('btnNewFolder').onclick = newFolder; document.getElementById('btnRenameFile').onclick = renameCurrentFile; document.getElementById('search').addEventListener('input', render); document.getElementById('filter').addEventListener('change', render); document.getElementById('btnSave').onclick = saveCurrent; document.getElementById('btnExport').onclick = ()=>{ openSaveExportModal(); }; document.getElementById('btnMerge').onclick = mergeSelected; document.getElementById('btnDeleteSelected').onclick = deleteSelected;
 const autoSaveCb = document.getElementById('autoSave'); autoSaveCb.addEventListener('change', ()=>{ if(autoSaveCb.checked) startAutoSave(); else stopAutoSave();});
 let autoSaveTimer=null;
-function startAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer = setInterval(()=>{ if(currentFileId) saveCurrent(); }, 60000);} function stopAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer=null}
+function startAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer = setInterval(()=>{ if(currentFileId) saveCurrent(); }, 3000);} function stopAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer=null}
 document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); saveCurrent(); } if((e.ctrlKey||e.metaKey) && e.key==='b'){ e.preventDefault(); doCmd('bold'); }});
 const editorEl = document.getElementById('editor');
 editorEl.addEventListener('input', ()=>{ if(currentFileId) { db.files[currentFileId].updated=Date.now(); } updateStats(); });
@@ -298,10 +292,11 @@ render();
 
 function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
-function openSaveExportModal(){ /* ... */ }
-function openSettingsModal(){ /* ... */ }
-function resetAllData() { /* ... */ }
-function openFindReplaceModal() { /* ... */ }
+function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 및 인쇄</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"> <button id="printBtn">인쇄</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; document.getElementById('printBtn').onclick = ()=>{ printEditorContent(); closeModal(); }; }
+function printEditorContent() { if (!currentFileId) return; const printFrame = document.createElement('iframe'); printFrame.style.display = 'none'; document.body.appendChild(printFrame); const content = db.files[currentFileId].content; const doc = printFrame.contentWindow.document; doc.open(); doc.write(`<html><head><title>${escapeHtml(db.files[currentFileId].name)}</title></head><body>${content}</body></html>`); doc.close(); printFrame.contentWindow.focus(); printFrame.contentWindow.print(); setTimeout(() => { document.body.removeChild(printFrame); }, 200); }
+function openSettingsModal(){ const html = `<h3>설정</h3> <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> <label style="display:flex; align-items:center; justify-content: space-between;"> <span>다크모드 사용</span> <input type="checkbox" id="setting_dark"> </label> <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th (GitHub)</a></div> <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 데이터 초기화</button> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="setting_close">닫기</button> </div> </div>`; openModal(html); document.getElementById('setting_dark').checked = dark; document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); }; document.getElementById('resetAll').onclick = resetAllData; document.getElementById('setting_close').onclick = closeModal; }
+function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameDisplay').textContent = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
+function openFindReplaceModal() { if (!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>찾기/바꾸기</h3><div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;"><input type="text" id="find-query" placeholder="찾을 내용" style="width: 100%;"><input type="text" id="replace-query" placeholder="바꿀 내용" style="width: 100%;"></div><div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;"><button id="find-btn">찾기</button><button id="replace-btn">바꾸기</button><button id="replace-all-btn">모두 바꾸기</button><button id="find-close-btn">닫기</button></div>`; openModal(html); const findInput = document.getElementById('find-query'); const replaceInput = document.getElementById('replace-query'); document.getElementById('find-btn').onclick = () => { const query = findInput.value; if (query && !window.find(query, false, false, true, false, true, false)) { alert('더 이상 찾는 내용이 없습니다.'); } }; document.getElementById('replace-btn').onclick = () => { const selection = window.getSelection(); if (selection.rangeCount > 0) { document.execCommand('insertText', false, replaceInput.value); } }; document.getElementById('replace-all-btn').onclick = () => { const findQuery = findInput.value; const replaceQuery = replaceInput.value; if (!findQuery) return; const editor = document.getElementById('editor'); let content = editor.innerHTML; const originalContent = content; content = content.replaceAll(findQuery, replaceQuery); if (originalContent !== content) { editor.innerHTML = content; saveCurrent(); alert('모든 항목을 바꿨습니다.'); }}; document.getElementById('find-close-btn').onclick = closeModal; }
 </script>
 </body>
 </html>
