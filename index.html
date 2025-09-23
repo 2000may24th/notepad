@@ -54,7 +54,6 @@
 
     :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4f5154}
     
-    /* [FIX] Dark mode active file style */
     body.dark .folder.active-file,
     body.dark .file-item.active-file {
       background-color: var(--active-bg);
@@ -74,13 +73,11 @@
     #btnBookmark.bookmarked { background-color: #ffc107; color: #000; border-color: #f5b300;}
     .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 399; }
     
-    /* Fullscreen Styles */
     body.editor-fullscreen #sidebar, body.editor-fullscreen .toolbar, body.editor-fullscreen #statsFooter, body.editor-fullscreen #expandHandle { display: none !important; }
     body.editor-fullscreen .app { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; height: 100vh; }
     body.editor-fullscreen main.editor-wrap { padding: 0; height: 100%; }
     body.editor-fullscreen .editor-container { height: 100%; border: 0; border-radius: 0; }
 
-    /* Text formatting toolbar styling */
     #formattingToolbar { display: none; }
     #formattingToolbar.active { display: flex; }
     
@@ -157,7 +154,6 @@
           <h3 id="fileNameDisplay" style="margin: 0; font-size: 16px; font-weight: 600;"></h3>
           <button id="btnRenameFile" class="btn-action">변경</button>
         </div>
-        <!-- [FIX] New formatting toolbar -->
         <div class="group" id="formattingToolbar">
           <button onclick="doCmd('bold')"><b>B</b></button>
           <button onclick="doCmd('italic')"><i>I</i></button>
@@ -217,7 +213,6 @@ let currentFileId = null;
 let currentZoom = 1;
 const BASE_FONT_SIZE = 16; // px
 
-// [FIX] New settings variables
 let enableFormatting = false;
 let preservePasteFormat = false;
 let enableSnippets = false;
@@ -246,7 +241,8 @@ const presetSnippets = {
   '//ddmmyy': { keys: ['//ddmmyy'], desc: '일월년 6자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString().slice(2); }, enabled: true },
   '//ddmmyyyy': { keys: ['//ddmmyyyy'], desc: '일월년 8자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString(); }, enabled: true },
   '//hhmmss': { keys: ['//hhmmss'], desc: '시분초 6자리', value: () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0'); }, enabled: true },
-  '//계산식': { keys: ['//계산식'], desc: '간단한 사칙연산 계산 (예: //5*10)', value: (expr) => { try { const result = eval(expr.replace(/\*\*/g, 'Math.pow(')); return isNaN(result) ? '유효하지 않은 수식' : result; } catch (e) { return '계산 오류'; } }, enabled: true },
+  // [FIX] 'Math.pow' 관련 버그 수정
+  '//계산식': { keys: ['//계산식'], desc: '간단한 사칙연산 계산 (예: //5*10)', value: (expr) => { try { const result = eval(expr); return isNaN(result) ? '유효하지 않은 수식' : result; } catch (e) { return '계산 오류'; } }, enabled: true },
 };
 
 function loadDB(){ 
@@ -349,17 +345,14 @@ const fileInput = document.getElementById('fileInput'); fileInput.addEventListen
 function mergeSelected(){ if(selectedFiles.size<2) return alert('두 개 이상의 파일을 선택하세요'); const ids = Array.from(selectedFiles); let merged=''; let name='병합문서'; ids.forEach(id=>{const f=db.files[id]; merged += `<h3>${escapeHtml(f.name)}</h3>` + (f.content||'') + '<hr>';}); const id = uid(); db.files[id]={id,name: name,content:merged,folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); selectedFiles.clear(); }
 function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 파일이 없습니다'); if(!confirm('선택된 파일을 삭제할까요?')) return; selectedFiles.forEach(id=>{delete db.files[id]; db.order = db.order.filter(x=>x!==id)}); saveDB(); render(); selectedFiles.clear(); }
 
-// [FIX] Correct line number counting
+// [FIX] contenteditable div의 자식 요소를 직접 카운트하여 줄 수 계산 정확도 향상
 function updateLineNumbers() { 
   const editor = document.getElementById('editor');
   const lineNumbersEl = document.getElementById('line-numbers');
   
-  const lines = editor.innerText.split('\n');
-  let lineCount = lines.length;
-  const lastLine = lines[lines.length - 1];
-  if (lastLine.trim() === '' && lines.length > 1) {
-    lineCount--;
-  }
+  // childElementCount는 에디터 내부의 최상위 태그(보통 한 줄당 <div> 하나) 수를 셉니다.
+  // 에디터가 비어있을 경우 0이 되므로, || 1을 통해 최소 1줄을 표시합니다.
+  const lineCount = editor.childElementCount || 1;
 
   const numbersHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>'); 
   lineNumbersEl.innerHTML = numbersHTML; 
@@ -367,7 +360,6 @@ function updateLineNumbers() {
   return lineCount;
 }
 
-// [FIX] Add speech time stat
 function updateStats() { 
   const editor = document.getElementById('editor'); 
   const text = editor.innerText || ''; 
@@ -382,9 +374,8 @@ function updateStats() {
   document.getElementById('statWords').textContent = words.toLocaleString(); 
   document.getElementById('statParagraphs').textContent = paragraphs.toLocaleString(); 
   
-  // Calculate speech time
-  const koreanRate = 250; // characters per minute
-  const englishRate = 130; // words per minute
+  const koreanRate = 250; 
+  const englishRate = 130; 
   
   const isKorean = /[가-힣]/.test(text);
   
@@ -423,7 +414,6 @@ const editorEl = document.getElementById('editor');
 editorEl.addEventListener('input', ()=>{ if(currentFileId) { db.files[currentFileId].updated=Date.now(); } updateStats(); });
 editorEl.addEventListener('scroll', () => { document.getElementById('line-numbers').scrollTop = editorEl.scrollTop; });
 
-// [FIX] Paste functionality based on setting and paste colors
 editorEl.addEventListener('paste', e => { 
   if (!preservePasteFormat) {
     e.preventDefault(); 
@@ -442,9 +432,10 @@ function handleSelection() {
     };
   }
 }
+// [FIX] 스니펫 실행 순서 및 로직 오류 수정
 editorEl.addEventListener('keydown', async (e) => {
   if (!enableSnippets || e.key !== 'Enter') return;
-  
+
   const selection = window.getSelection();
   if (selection.rangeCount > 0) {
     const range = selection.getRangeAt(0);
@@ -452,56 +443,58 @@ editorEl.addEventListener('keydown', async (e) => {
     if (textNode.nodeType === Node.TEXT_NODE) {
       const text = textNode.textContent;
       const cursorPosition = range.startOffset;
-      const lastLine = text.substring(0, cursorPosition);
+      const textBeforeCursor = text.substring(0, cursorPosition);
       
       let replacement = '';
       let isSnippetFound = false;
+      let triggerLength = 0;
+
+      // 1. 일반 & 커스텀 스니펫 우선 검색
+      const snippetKeys = Object.values(presetSnippets)
+        .filter(s => s.enabled && s.keys[0] !== '//계산식') 
+        .flatMap(s => s.keys);
       
-      // Check for calculator first
-      const calcMatch = lastLine.match(/\/\/(.*)$/);
-      if (calcMatch && presetSnippets['//계산식'].enabled) {
-        const expr = calcMatch[1].trim();
-        if (expr) {
-          const calculatorFunction = presetSnippets['//계산식'].value;
-          const result = calculatorFunction(expr);
-          replacement = String(result);
-          
-          textNode.textContent = lastLine.substring(0, lastLine.length - calcMatch[0].length) + replacement;
-          isSnippetFound = true;
+      const userSnippetTriggers = userSnippets.filter(s => s.enabled).map(s => s.trigger);
+      const allTriggers = [...snippetKeys, ...userSnippetTriggers].sort((a, b) => b.length - a.length);
+
+      const foundTrigger = allTriggers.find(trigger => textBeforeCursor.endsWith(trigger));
+
+      if (foundTrigger) {
+        const preset = Object.values(presetSnippets).find(s => s.keys.includes(foundTrigger));
+        const user = userSnippets.find(s => s.trigger === foundTrigger);
+        const snippetValue = preset ? preset.value : user.value;
+        
+        replacement = (typeof snippetValue === 'function') ? await snippetValue() : snippetValue;
+        triggerLength = foundTrigger.length;
+        isSnippetFound = true;
+      }
+
+      // 2. 일반 스니펫이 없으면 계산기 스니펫 확인
+      if (!isSnippetFound && presetSnippets['//계산식'].enabled) {
+        const calcMatch = textBeforeCursor.match(/\/\/([0-9+\-*/\s.()**]+)$/);
+        if (calcMatch) {
+            const expr = calcMatch[1].trim();
+            if (expr) {
+                const result = presetSnippets['//계산식'].value(expr);
+                if (result !== '유효하지 않은 수식' && result !== '계산 오류') {
+                    replacement = String(result);
+                    triggerLength = calcMatch[0].length;
+                    isSnippetFound = true;
+                }
+            }
         }
       }
 
-      // Check for other snippets
-      if (!isSnippetFound) {
-        const snippetKeys = Object.values(presetSnippets)
-          .filter(s => s.enabled)
-          .flatMap(s => s.keys);
-        
-        const userSnippetTriggers = userSnippets.filter(s => s.enabled).map(s => s.trigger);
-        const allTriggers = [...snippetKeys, ...userSnippetTriggers];
-        
-        const snippetToInsert = allTriggers.find(trigger => lastLine.endsWith(trigger));
-
-        if (snippetToInsert) {
-          const preset = Object.values(presetSnippets).find(s => s.keys.includes(snippetToInsert));
-          const user = userSnippets.find(s => s.trigger === snippetToInsert);
-          const snippetValue = (preset) ? preset.value : user.value;
-          
-          if (typeof snippetValue === 'function') {
-            replacement = await snippetValue();
-          } else {
-            replacement = snippetValue;
-          }
-
-          textNode.textContent = lastLine.substring(0, lastLine.length - snippetToInsert.length) + replacement;
-          isSnippetFound = true;
-        }
-      }
-
+      // 3. 스니펫이 발견되면 텍스트 교체
       if (isSnippetFound) {
         e.preventDefault();
-        range.setStart(textNode, textNode.textContent.length);
+        const newTextBeforeCursor = textBeforeCursor.substring(0, textBeforeCursor.length - triggerLength) + replacement;
+        textNode.textContent = newTextBeforeCursor + text.substring(cursorPosition);
+        
+        range.setStart(textNode, newTextBeforeCursor.length);
         range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
       }
     }
   }
@@ -540,17 +533,14 @@ function updateZoom() { const newSize = BASE_FONT_SIZE * currentZoom; editorEl.s
 function toggleBookmark() { if (!currentFileId) return alert('파일을 선택하세요'); const file = db.files[currentFileId]; file.star = !file.star; file.updated = Date.now(); saveDB(); render(); }
 function updateBookmarkButtonState() { const btn = document.getElementById('btnBookmark'); if (currentFileId && db.files[currentFileId] && db.files[currentFileId].star) { btn.classList.add('bookmarked'); } else { btn.classList.remove('bookmarked'); }}
 
-// [FIX] New doCmd function that checks for formatting toggle
 function doCmd(cmd, val = null){ 
   if (enableFormatting) {
     document.execCommand(cmd, false, val); 
   } else {
-    // Show a message or do nothing if formatting is disabled
     console.log("Formatting is currently disabled.");
   }
 }
 
-// [FIX] Event listeners for formatting toolbar
 document.getElementById('fontSize').addEventListener('change', (e) => {
     doCmd('fontSize', e.target.value);
 });
@@ -566,7 +556,6 @@ function openModal(contentHtml){ const root = document.getElementById('modalRoot
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
 function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 및 인쇄</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"> <button id="printBtn">인쇄</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; document.getElementById('printBtn').onclick = ()=>{ printEditorContent(); closeModal(); }; }
 
-// [FIX] Implement file export functionality
 function downloadSelectedFormats(fmts) {
   if (!currentFileId) return alert('파일을 선택하세요');
   const file = db.files[currentFileId];
@@ -592,10 +581,6 @@ function downloadSelectedFormats(fmts) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             
-            // Add Korean font
-            // Base64 encoded Malgun Gothic font subset (optional, but good for compatibility)
-            // For simplicity, we assume the browser will handle font rendering.
-            // A more robust solution would involve embedding a font like Nanum Gothic.
             doc.setFont('Malgun Gothic', 'normal');
 
             doc.html(contentHtml, {
@@ -631,7 +616,6 @@ function openMainSettingsModal(){
       </div>
       <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> 
       
-      <!-- [FIX] New settings toggles -->
       <label style="display:flex; align-items:center; justify-content: space-between;"> 
         <span>텍스트 서식 토글</span> 
         <input type="checkbox" id="setting_formatting"> 
@@ -803,7 +787,6 @@ function openSnippetModal(){
 function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameDisplay').textContent = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
 function openFindReplaceModal() { if (!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>찾기/바꾸기</h3><div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;"><input type="text" id="find-query" placeholder="찾을 내용" style="width: 100%;"><input type="text" id="replace-query" placeholder="바꿀 내용" style="width: 100%;"></div><div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;"><button id="find-btn">찾기</button><button id="replace-btn">바꾸기</button><button id="replace-all-btn">모두 바꾸기</button><button id="find-close-btn">닫기</button></div>`; openModal(html); const findInput = document.getElementById('find-query'); const replaceInput = document.getElementById('replace-query'); document.getElementById('find-btn').onclick = () => { const query = findInput.value; if (query && !window.find(query, false, false, true, false, true, false)) { alert('더 이상 찾는 내용이 없습니다.'); } }; document.getElementById('replace-btn').onclick = () => { const selection = window.getSelection(); if (selection.rangeCount > 0) { document.execCommand('insertText', false, replaceInput.value); } }; document.getElementById('replace-all-btn').onclick = () => { const findQuery = findInput.value; const replaceQuery = replaceInput.value; if (!findQuery) return; const editor = document.getElementById('editor'); let content = editor.innerHTML; const originalContent = content; content = content.replaceAll(findQuery, replaceQuery); if (originalContent !== content) { editor.innerHTML = content; saveCurrent(); alert('모든 항목을 바꿨습니다.'); }}; document.getElementById('find-close-btn').onclick = closeModal; }
 
-// [FIX] New function to update toolbar visibility
 function updateFormattingToolbar() {
   const toolbar = document.getElementById('formattingToolbar');
   if (enableFormatting) {
