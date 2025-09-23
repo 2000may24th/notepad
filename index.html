@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Static Web Notepad</title>
   <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.4.1/dist/html-docx.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.3/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
 
   <style>
@@ -53,6 +53,13 @@
     .drop-target{outline:2px dashed var(--accent)}
 
     :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4f5154}
+    
+    /* [FIX] Dark mode active file style */
+    body.dark .folder.active-file,
+    body.dark .file-item.active-file {
+      background-color: var(--active-bg);
+      border-left: 2px solid var(--accent);
+    }
     
     body.dark{background:var(--bg);color:#efefef}
     body.dark nav{background:var(--sidebar);border-color:#4a4a4a}
@@ -293,6 +300,58 @@ render();
 function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
 function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 및 인쇄</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"> <button id="printBtn">인쇄</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; document.getElementById('printBtn').onclick = ()=>{ printEditorContent(); closeModal(); }; }
+
+// [FIX] Implement file export functionality
+function downloadSelectedFormats(fmts) {
+  if (!currentFileId) return alert('파일을 선택하세요');
+  const file = db.files[currentFileId];
+  const fileName = file.name || 'document';
+  const contentHtml = file.content || '';
+  const contentText = document.getElementById('editor').innerText;
+
+  fmts.forEach(format => {
+    switch (format) {
+      case 'txt': {
+        const blob = new Blob([contentText], { type: 'text/plain;charset=utf-8' });
+        saveAs(blob, `${fileName}.txt`);
+        break;
+      }
+      case 'docx': {
+        const content = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${contentHtml}</body></html>`;
+        const blob = htmlDocx.asBlob(content);
+        saveAs(blob, `${fileName}.docx`);
+        break;
+      }
+      case 'pdf': {
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Add Korean font
+            // Base64 encoded Malgun Gothic font subset (optional, but good for compatibility)
+            // For simplicity, we assume the browser will handle font rendering.
+            // A more robust solution would involve embedding a font like Nanum Gothic.
+            doc.setFont('Malgun Gothic', 'normal');
+
+            doc.html(contentHtml, {
+                callback: function (doc) {
+                    doc.save(`${fileName}.pdf`);
+                },
+                x: 15,
+                y: 15,
+                width: 170,
+                windowWidth: 650
+            });
+        } catch (e) {
+            console.error("PDF export failed:", e);
+            alert("PDF 내보내기에 실패했습니다. 복잡한 서식은 지원되지 않을 수 있습니다.");
+        }
+        break;
+      }
+    }
+  });
+}
+
 function printEditorContent() { if (!currentFileId) return; const printFrame = document.createElement('iframe'); printFrame.style.display = 'none'; document.body.appendChild(printFrame); const content = db.files[currentFileId].content; const doc = printFrame.contentWindow.document; doc.open(); doc.write(`<html><head><title>${escapeHtml(db.files[currentFileId].name)}</title></head><body>${content}</body></html>`); doc.close(); printFrame.contentWindow.focus(); printFrame.contentWindow.print(); setTimeout(() => { document.body.removeChild(printFrame); }, 200); }
 function openSettingsModal(){ const html = `<h3>설정</h3> <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> <label style="display:flex; align-items:center; justify-content: space-between;"> <span>다크모드 사용</span> <input type="checkbox" id="setting_dark"> </label> <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th (GitHub)</a></div> <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 데이터 초기화</button> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="setting_close">닫기</button> </div> </div>`; openModal(html); document.getElementById('setting_dark').checked = dark; document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); }; document.getElementById('resetAll').onclick = resetAllData; document.getElementById('setting_close').onclick = closeModal; }
 function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameDisplay').textContent = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
