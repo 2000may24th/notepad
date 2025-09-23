@@ -115,7 +115,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.2.0</h2>
+        <h2>Notepad v1.5.0</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">◀</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -241,7 +241,6 @@ const presetSnippets = {
   '//ddmmyy': { keys: ['//ddmmyy'], desc: '일월년 6자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString().slice(2); }, enabled: true },
   '//ddmmyyyy': { keys: ['//ddmmyyyy'], desc: '일월년 8자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString(); }, enabled: true },
   '//hhmmss': { keys: ['//hhmmss'], desc: '시분초 6자리', value: () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0'); }, enabled: true },
-  // [FIX] 'Math.pow' 관련 버그 수정
   '//계산식': { keys: ['//계산식'], desc: '간단한 사칙연산 계산 (예: //5*10)', value: (expr) => { try { const result = eval(expr); return isNaN(result) ? '유효하지 않은 수식' : result; } catch (e) { return '계산 오류'; } }, enabled: true },
 };
 
@@ -345,13 +344,10 @@ const fileInput = document.getElementById('fileInput'); fileInput.addEventListen
 function mergeSelected(){ if(selectedFiles.size<2) return alert('두 개 이상의 파일을 선택하세요'); const ids = Array.from(selectedFiles); let merged=''; let name='병합문서'; ids.forEach(id=>{const f=db.files[id]; merged += `<h3>${escapeHtml(f.name)}</h3>` + (f.content||'') + '<hr>';}); const id = uid(); db.files[id]={id,name: name,content:merged,folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); selectedFiles.clear(); }
 function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 파일이 없습니다'); if(!confirm('선택된 파일을 삭제할까요?')) return; selectedFiles.forEach(id=>{delete db.files[id]; db.order = db.order.filter(x=>x!==id)}); saveDB(); render(); selectedFiles.clear(); }
 
-// [FIX] contenteditable div의 자식 요소를 직접 카운트하여 줄 수 계산 정확도 향상
 function updateLineNumbers() { 
   const editor = document.getElementById('editor');
   const lineNumbersEl = document.getElementById('line-numbers');
   
-  // childElementCount는 에디터 내부의 최상위 태그(보통 한 줄당 <div> 하나) 수를 셉니다.
-  // 에디터가 비어있을 경우 0이 되므로, || 1을 통해 최소 1줄을 표시합니다.
   const lineCount = editor.childElementCount || 1;
 
   const numbersHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>'); 
@@ -432,70 +428,75 @@ function handleSelection() {
     };
   }
 }
-// [FIX] 스니펫 실행 순서 및 로직 오류 수정
+// [FIX] 스니펫 교체 로직을 Range API를 사용하도록 개선하여 안정성 확보
 editorEl.addEventListener('keydown', async (e) => {
   if (!enableSnippets || e.key !== 'Enter') return;
 
   const selection = window.getSelection();
-  if (selection.rangeCount > 0) {
-    const range = selection.getRangeAt(0);
-    const textNode = range.startContainer;
-    if (textNode.nodeType === Node.TEXT_NODE) {
-      const text = textNode.textContent;
-      const cursorPosition = range.startOffset;
-      const textBeforeCursor = text.substring(0, cursorPosition);
+  if (!selection.rangeCount) return;
+
+  const range = selection.getRangeAt(0);
+  const textNode = range.startContainer;
+
+  // 스니펫은 커서가 접혀있을 때만(즉, 텍스트가 선택되지 않았을 때) 작동합니다.
+  if (textNode.nodeType === Node.TEXT_NODE && range.collapsed) {
+    const text = textNode.textContent;
+    const cursorPosition = range.startOffset;
+    const textBeforeCursor = text.substring(0, cursorPosition);
+    
+    let replacement = '';
+    let isSnippetFound = false;
+    let triggerLength = 0;
+
+    // 1. 일반 & 커스텀 스니펫 우선 검색
+    const snippetKeys = Object.values(presetSnippets)
+      .filter(s => s.enabled && s.keys[0] !== '//계산식') 
+      .flatMap(s => s.keys);
+    
+    const userSnippetTriggers = userSnippets.filter(s => s.enabled).map(s => s.trigger);
+    const allTriggers = [...snippetKeys, ...userSnippetTriggers].sort((a, b) => b.length - a.length);
+
+    const foundTrigger = allTriggers.find(trigger => textBeforeCursor.endsWith(trigger));
+
+    if (foundTrigger) {
+      const preset = Object.values(presetSnippets).find(s => s.keys.includes(foundTrigger));
+      const user = userSnippets.find(s => s.trigger === foundTrigger);
+      const snippetValue = preset ? preset.value : user.value;
       
-      let replacement = '';
-      let isSnippetFound = false;
-      let triggerLength = 0;
+      const result = (typeof snippetValue === 'function') ? await snippetValue() : snippetValue;
+      replacement = String(result || '');
+      triggerLength = foundTrigger.length;
+      isSnippetFound = true;
+    }
 
-      // 1. 일반 & 커스텀 스니펫 우선 검색
-      const snippetKeys = Object.values(presetSnippets)
-        .filter(s => s.enabled && s.keys[0] !== '//계산식') 
-        .flatMap(s => s.keys);
+    // 2. 일반 스니펫이 없으면 계산기 스니펫 확인
+    if (!isSnippetFound && presetSnippets['//계산식'].enabled) {
+      const calcMatch = textBeforeCursor.match(/\/\/([0-9+\-*/\s.()**]+)$/);
+      if (calcMatch) {
+          const expr = calcMatch[1].trim();
+          if (expr) {
+              const result = presetSnippets['//계산식'].value(expr);
+              if (result !== '유효하지 않은 수식' && result !== '계산 오류') {
+                  replacement = String(result);
+                  triggerLength = calcMatch[0].length;
+                  isSnippetFound = true;
+              }
+          }
+      }
+    }
+
+    // 3. 스니펫이 발견되면 텍스트 교체 및 줄바꿈 방지
+    if (isSnippetFound) {
+      e.preventDefault();
       
-      const userSnippetTriggers = userSnippets.filter(s => s.enabled).map(s => s.trigger);
-      const allTriggers = [...snippetKeys, ...userSnippetTriggers].sort((a, b) => b.length - a.length);
+      range.setStart(textNode, cursorPosition - triggerLength);
+      range.setEnd(textNode, cursorPosition);
+      range.deleteContents();
 
-      const foundTrigger = allTriggers.find(trigger => textBeforeCursor.endsWith(trigger));
+      const replacementNode = document.createTextNode(replacement);
+      range.insertNode(replacementNode);
 
-      if (foundTrigger) {
-        const preset = Object.values(presetSnippets).find(s => s.keys.includes(foundTrigger));
-        const user = userSnippets.find(s => s.trigger === foundTrigger);
-        const snippetValue = preset ? preset.value : user.value;
-        
-        replacement = (typeof snippetValue === 'function') ? await snippetValue() : snippetValue;
-        triggerLength = foundTrigger.length;
-        isSnippetFound = true;
-      }
-
-      // 2. 일반 스니펫이 없으면 계산기 스니펫 확인
-      if (!isSnippetFound && presetSnippets['//계산식'].enabled) {
-        const calcMatch = textBeforeCursor.match(/\/\/([0-9+\-*/\s.()**]+)$/);
-        if (calcMatch) {
-            const expr = calcMatch[1].trim();
-            if (expr) {
-                const result = presetSnippets['//계산식'].value(expr);
-                if (result !== '유효하지 않은 수식' && result !== '계산 오류') {
-                    replacement = String(result);
-                    triggerLength = calcMatch[0].length;
-                    isSnippetFound = true;
-                }
-            }
-        }
-      }
-
-      // 3. 스니펫이 발견되면 텍스트 교체
-      if (isSnippetFound) {
-        e.preventDefault();
-        const newTextBeforeCursor = textBeforeCursor.substring(0, textBeforeCursor.length - triggerLength) + replacement;
-        textNode.textContent = newTextBeforeCursor + text.substring(cursorPosition);
-        
-        range.setStart(textNode, newTextBeforeCursor.length);
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
+      selection.collapse(replacementNode, replacementNode.length);
     }
   }
 });
