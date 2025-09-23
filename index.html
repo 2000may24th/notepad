@@ -299,7 +299,7 @@ function onContainerDragLeave(e) { e.currentTarget.classList.remove('drop-target
 function onDragStart(ev, id, type){ dragId = id; dragType = type; ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
 function cleanupDragState() { document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); dragId = null; dragType = null;}
 function onDrop(ev, targetId) { ev.preventDefault(); ev.stopPropagation(); const targetIsFolder = ev.currentTarget.classList.contains('folder'); if (dragType === 'file' && !targetIsFolder) { const file = db.files[dragId]; if (file.folder) file.folder = null; reorderFile(dragId, targetId); } else if (dragType === 'folder' && targetIsFolder) { reorderFolder(dragId, targetId); } render(); cleanupDragState();}
-function onFileContainerDrop(ev) { ev.preventDefault(); if (dragType === 'file') { const file = db.files[dragId]; if (file.folder) file.folder = null; reorderFile(dragId, null); render(); } cleanupDragState();}
+function onFileContainerDrop(ev) { ev.preventDefault(); if (dragType === 'file') { const file = db.files[dragId]; if (file.folder) file.folder = null; reorderFile(dragId, null); render(); } cleanupDragState(); }
 function onFolderContainerDrop(ev) { ev.preventDefault(); if (dragType === 'folder') { reorderFolder(dragId, null); render(); } cleanupDragState(); }
 function onFolderDrop(ev, folderId){ ev.preventDefault(); ev.stopPropagation(); if(dragType==='file' && dragId && db.files[dragId]){ db.files[dragId].folder = folderId; db.files[dragId].updated = Date.now(); db.order = db.order.filter(id => id !== dragId); saveDB(); render(); } cleanupDragState();}
 function reorderFile(dragIdLocal, targetId){ const idx = db.order.indexOf(dragIdLocal); if(idx>-1) db.order.splice(idx,1); if(targetId){ const ti = db.order.indexOf(targetId); db.order.splice(ti,0,dragIdLocal); } else { db.order.push(dragIdLocal); } saveDB();}
@@ -432,8 +432,9 @@ editorEl.addEventListener('paste', e => {
   }
 });
 
-editorEl.addEventListener('keydown', async (e) => {
-  if (!enableSnippets || e.key !== 'Enter') return;
+// [FIX] Update snippet trigger to be on spacebar
+editorEl.addEventListener('keyup', async (e) => {
+  if (!enableSnippets || e.key !== ' ') return;
   
   const selection = window.getSelection();
   if (selection.rangeCount > 0) {
@@ -442,51 +443,36 @@ editorEl.addEventListener('keydown', async (e) => {
     if (textNode.nodeType === Node.TEXT_NODE) {
       const text = textNode.textContent;
       const cursorPosition = range.startOffset;
-      const lastLine = text.substring(0, cursorPosition);
+      const lastWord = text.substring(0, cursorPosition).match(/(\S+)$/)?.[1];
       
       let replacement = '';
       
-      // Check for calculator first
-      const calcMatch = lastLine.match(/\/\/(.*)$/);
-      if (calcMatch && presetSnippets['//계산식'].enabled) {
-        e.preventDefault();
-        const expr = calcMatch[1].trim();
-        const calculatorFunction = presetSnippets['//계산식'].value;
-        const result = calculatorFunction(expr);
-        replacement = String(result);
-        
-        const newText = lastLine.substring(0, lastLine.length - calcMatch[0].length) + replacement;
-        textNode.textContent = newText;
-        range.setStart(textNode, newText.length);
-        range.collapse(true);
-        return;
-      }
-
-      // Check for other snippets
-      const snippetKeys = Object.values(presetSnippets)
-        .filter(s => s.enabled)
-        .flatMap(s => s.keys);
+      // Check for calculator and other snippets
+      const snippetToInsert = Object.values(presetSnippets).find(s => s.enabled && s.keys.includes(lastWord)) || userSnippets.find(s => s.enabled && s.trigger === lastWord);
       
-      const userSnippetTriggers = userSnippets.filter(s => s.enabled).map(s => s.trigger);
-      
-      const allTriggers = [...snippetKeys, ...userSnippetTriggers];
-      const snippetToInsert = allTriggers.find(trigger => lastLine.endsWith(trigger));
-
       if (snippetToInsert) {
-        e.preventDefault();
-        const preset = Object.values(presetSnippets).find(s => s.keys.includes(snippetToInsert));
-        const user = userSnippets.find(s => s.trigger === snippetToInsert);
-        const snippetValue = (preset) ? preset.value : user.value;
+        let snippetValue = snippetToInsert.value;
         
-        if (typeof snippetValue === 'function') {
-          replacement = await snippetValue();
+        if (snippetToInsert.keys && snippetToInsert.keys.includes('//계산식')) {
+          // Calculator logic
+          const expr = lastWord.substring('//계산식'.length).trim();
+          if (expr) {
+            replacement = String(snippetValue(expr));
+          } else {
+            return; // Don't replace if no expression
+          }
         } else {
-          replacement = snippetValue;
+          // Other snippet logic
+          if (typeof snippetValue === 'function') {
+            replacement = await snippetValue();
+          } else {
+            replacement = snippetValue;
+          }
         }
-
-        const newText = lastLine.substring(0, lastLine.length - snippetToInsert.length) + replacement;
-        textNode.textContent = newText + text.substring(cursorPosition);
-        range.setStart(textNode, newText.length);
+        
+        const newText = text.substring(0, cursorPosition - lastWord.length) + replacement + text.substring(cursorPosition);
+        textNode.textContent = newText;
+        range.setStart(textNode, cursorPosition - lastWord.length + replacement.length);
         range.collapse(true);
       }
     }
