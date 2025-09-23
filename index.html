@@ -23,7 +23,7 @@
     button.small{padding:6px}
     .list{margin-top:8px}
     .section-title{font-size:12px;color:var(--muted);margin:10px 0 6px}
-    .folder, .file-item{padding:8px;border-radius:6px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+    .folder, .file-item{padding:8px;border-radius:6px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between; border-left: 2px solid transparent;}
     .folder{background:linear-gradient(90deg,#fdfdfd,#fbfcff);border:1px solid #eee}
     .file-item{background:#fff;border:1px solid #f0f3f7}
     .file-item.draggable{cursor:grab}
@@ -32,8 +32,9 @@
     .file-item .meta .sub{font-size:11px;color:var(--muted);padding-left: 2px;}
     .file-item .actions{display:flex;gap:6px;margin-left:8px}
     .folder.active-file, .file-item.active-file { background-color: var(--active-bg); }
-    main{display:flex;flex-direction:column;gap:8px;padding:12px;overflow:hidden}
-    .toolbar{display:flex;gap:6px;align-items:center; flex-wrap: wrap;}
+    main{display:flex;flex-direction:column;gap:8px;padding:12px;overflow:hidden; position: relative;}
+    .toolbar{display:flex;gap:6px;align-items:center; flex-wrap: wrap; transition: padding-left .25s ease;}
+    .app.sidebar-hidden .toolbar { padding-left: 48px; }
     .toolbar .group{display:flex;gap:6px;align-items:center;background:var(--card);padding:6px;border-radius:8px;border:1px solid #e9edf3}
     #fileNameGroup { min-width: 250px; justify-content: space-between; }
     #fileNameDisplay { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -51,17 +52,41 @@
     body.dark #statsFooter span { color: #ddd; }
     .drop-target{outline:2px dashed var(--accent)}
 
-    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#5a5a5a}
+    :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4f5154}
     
     body.dark{background:var(--bg);color:#efefef}
     body.dark nav{background:var(--sidebar);border-color:#4a4a4a}
     body.dark .file-item, body.dark .folder{background:var(--card);border-color:#4a4a4a}
+    body.dark .folder.active-file, body.dark .file-item.active-file { background-color: var(--active-bg); border-left: 2px solid var(--accent); }
     body.dark button, body.dark select, body.dark input[type=text] {background:#5a5a5a;color:#eee;border-color:#666}
     body.dark .editor-container { background: var(--card); border-color: #4a4a4a;}
     body.dark #line-numbers { background-color: var(--bg); border-right: 1px solid #4a4a4a; }
-    #expandHandle{position:fixed;left:8px;top:16px;width:36px;height:36px;border-radius:6px;background:var(--card);border:1px solid #ddd;display:none;align-items:center;justify-content:center;z-index:300;cursor:pointer}
+    #expandHandle{position:absolute;left:8px;top:12px;width:36px;height:36px;border-radius:6px;background:var(--card);border:1px solid #ddd;display:none;align-items:center;justify-content:center;z-index:300;cursor:pointer}
     .app.sidebar-hidden #expandHandle{display:flex}
     #btnBookmark.bookmarked { background-color: #ffc107; color: #000; border-color: #f5b300;}
+    
+    /* Fullscreen Styles */
+    body.editor-fullscreen #sidebar,
+    body.editor-fullscreen .toolbar,
+    body.editor-fullscreen #statsFooter,
+    body.editor-fullscreen #expandHandle {
+        display: none !important;
+    }
+    body.editor-fullscreen .app {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: 1fr !important;
+        height: 100vh;
+    }
+    body.editor-fullscreen main.editor-wrap {
+        padding: 0;
+        height: 100%;
+    }
+    body.editor-fullscreen .editor-container {
+        height: 100%;
+        border: 0;
+        border-radius: 0;
+    }
+
     @media (max-width:800px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}nav{order:2;height:220px;overflow:auto}.editor-wrap{order:1} #statsFooter{grid-column: 1 / -1;}}
   </style>
 </head>
@@ -69,11 +94,11 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.1.6</h2>
+        <h2>Notepad v1.5.0</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">⬅</button>
-          <button class="small" id="btnNewFile">+파일</button>
-          <button class="small" id="btnNewFolder">폴더</button>
+          <button class="small" id="btnNewFile">+ 파일</button>
+          <button class="small" id="btnNewFolder">+ 폴더</button>
         </div>
       </header>
 
@@ -92,7 +117,7 @@
       <div style="margin-top:12px">
         <div class="section-title">임포트</div>
         <input id="fileInput" type="file" multiple accept=".txt,.md,.html,.docx,.pdf" />
-        <div style="margin-top:6px;font-size:12px;color:var(--muted)">여러 파일 선택 가능 • .txt/.docx/.pdf</div>
+        <div style="margin-top:6px;font-size:12px;color:var(--muted)">여러 파일 선택 가능 • .txt/.docx/.pdf 지원</div>
         <div class="section-title" style="margin-top:12px">병합 / 관리</div>
         <button id="btnMerge">선택 파일 병합</button>
         <button id="btnDeleteSelected">선택 삭제</button>
@@ -100,10 +125,11 @@
     </nav>
 
     <main class="editor-wrap">
+      <div id="expandHandle" title="사이드바 펼치기">➡</div>
       <div class="toolbar">
         <div class="group" id="fileNameGroup">
           <h3 id="fileNameDisplay" style="margin: 0; font-size: 16px; font-weight: 600;"></h3>
-          <button id="btnRenameFile" class="btn-action">변경</button>
+          <button id="btnRenameFile" class="btn-action">✏️ 이름 수정</button>
         </div>
         <div class="group">
           <button onclick="doCmd('bold')"><b>B</b></button>
@@ -114,15 +140,15 @@
           <select id="fontSize" onchange="doCmd('fontSize', this.value)"><option value="3">기본</option><option value="4">크게</option><option value="5">더 크게</option></select>
         </div>
         <div class="group">
-            <button id="btnSave" class="btn-action">저장</button>
-            <button id="btnExport" class="btn-action">내보내기</button>
+            <button id="btnSave" class="btn-action">💾 저장</button>
+            <button id="btnExport" class="btn-action">📤 내보내기</button>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="autoSave"> 자동저장</label>
         </div>
         <div class="top-right-actions">
-          <button id="btnFindReplace" class="btn-action">찾기/바꾸기</button>
-          <button id="btnBookmark" class="btn-action">⭐</button>
-          <button id="btnDeleteFile" class="btn-action">삭제</button>
-          <button id="btnSettings">설정</button>
+          <button id="btnFindReplace" class="btn-action">🔍 찾기/바꾸기</button>
+          <button id="btnBookmark" class="btn-action">⭐ 북마크</button>
+          <button id="btnDeleteFile" class="btn-action">🗑️ 파일 삭제</button>
+          <button id="btnSettings">⚙️ 환경설정</button>
         </div>
       </div>
       <div class="editor-container">
@@ -130,7 +156,7 @@
         <div id="editor" contenteditable="true" spellcheck="false"></div>
       </div>
     </main>
-    <div id="expandHandle" title="사이드바 펼치기">➡</div>
+
     <footer id="statsFooter">
         글자: <span id="statChars">0</span>
         공백제외: <span id="statCharsNoSpace">0</span>
@@ -184,7 +210,7 @@ function renderFolders(){
     const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id;
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     const toggleIcon = f._open ? '▾' : '▸';
-    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
+    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">📁 ${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder'); el.ondragover = allowDrop; el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); el.ondrop = (ev) => { if (dragType === 'file') onFolderDrop(ev, f.id); else onDrop(ev, f.id); };
     const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
     Object.values(db.files).forEach(file => { if(file.folder === f.id) { const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id; if(file.id === currentFileId) { fi.classList.add('active-file'); } fi.innerHTML = renderFileItem(file); fi.onclick = (e) => { if(e.target.type !== 'checkbox') openFile(file.id); }; fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); children.appendChild(fi); }});
@@ -210,7 +236,7 @@ function renameFolder(id){ const name = prompt('새 폴더 이름:', db.folders[
 function deleteFolder(id){ if(!confirm('폴더와 그 안의 파일들을 삭제하시겠어요?')) return; Object.values(db.files).forEach(f=>{if(f.folder===id) delete db.files[f.id];}); delete db.folders[id]; db.folderOrder = (db.folderOrder||[]).filter(x=>x!==id); db.order = db.order.filter(x=>db.files[x]); saveDB(); render(); }
 function openFile(id){ currentFileId = id; const f = db.files[id]; document.getElementById('editor').innerHTML = f.content || '<div><br></div>'; document.getElementById('fileNameDisplay').textContent = f.name || ''; render(); updateStats(); }
 function renameCurrentFile(){ if(!currentFileId) return; const currentName = db.files[currentFileId].name; const newName = prompt('새 파일 이름:', currentName); if(!newName || newName.trim() === '') return alert('이름을 비울 수 없습니다'); db.files[currentFileId].name = newName.trim(); db.files[currentFileId].updated = Date.now(); saveDB(); render(); document.getElementById('fileNameDisplay').textContent = newName.trim(); }
-function saveCurrent(){ if(!currentFileId) return alert('먼저 파일을 선택하세요'); const content = document.getElementById('editor').innerHTML; const f = db.files[currentFileId]; f.content = content; f.updated = Date.now(); if(!f.name || f.name==='무제'){ const t = stripTags(content).slice(0,30).trim(); if(t) f.name = t; document.getElementById('fileNameDisplay').textContent = f.name;} saveDB(); render(); const saveBtn = document.getElementById('btnSave'); saveBtn.textContent = '✅'; setTimeout(() => { saveBtn.textContent = '저장'; }, 1500); }
+function saveCurrent(){ if(!currentFileId) return alert('먼저 파일을 선택하세요'); const content = document.getElementById('editor').innerHTML; const f = db.files[currentFileId]; f.content = content; f.updated = Date.now(); if(!f.name || f.name==='무제'){ const t = stripTags(content).slice(0,30).trim(); if(t) f.name = t; document.getElementById('fileNameDisplay').textContent = f.name;} saveDB(); render(); const saveBtn = document.getElementById('btnSave'); saveBtn.textContent = '✅ 저장됨'; setTimeout(() => { saveBtn.textContent = '💾 저장'; }, 1500); }
 function deleteFileById(id){ if(!confirm('파일을 삭제할까요?')) return; delete db.files[id]; db.order = db.order.filter(x=>x!==id); if(currentFileId===id){ currentFileId=null; document.getElementById('editor').innerHTML=''; document.getElementById('fileNameDisplay').textContent=''; updateStats(); } saveDB(); render(); }
 function deleteCurrentFile(){ if(!currentFileId) return alert('파일 선택'); deleteFileById(currentFileId); }
 function toggleSelect(ev,id){ if(ev.target.checked) selectedFiles.add(id); else selectedFiles.delete(id); }
@@ -240,7 +266,8 @@ toggleSidebarBtn.addEventListener('click', toggleSidebar); expandHandle.addEvent
 document.getElementById('btnSettings').addEventListener('click', ()=>{ openSettingsModal(); }); document.getElementById('btnDeleteFile').onclick = deleteCurrentFile; document.getElementById('btnBookmark').onclick = toggleBookmark; document.getElementById('btnFindReplace').onclick = openFindReplaceModal;
 document.getElementById('zoomInBtn').onclick = () => { currentZoom = Math.min(2, currentZoom + 0.1); updateZoom(); }
 document.getElementById('zoomOutBtn').onclick = () => { currentZoom = Math.max(0.5, currentZoom - 0.1); updateZoom(); }
-document.getElementById('fullscreenBtn').onclick = () => { if (!document.fullscreenElement) { document.documentElement.requestFullscreen(); } else { document.exitFullscreen(); } }
+document.getElementById('fullscreenBtn').onclick = () => { const editorContainer = document.querySelector('.editor-container'); if (!document.fullscreenElement) { editorContainer.requestFullscreen(); } else { document.exitFullscreen(); } }
+document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement) { document.body.classList.add('editor-fullscreen'); } else { document.body.classList.remove('editor-fullscreen'); } });
 function updateZoom() { const newSize = BASE_FONT_SIZE * currentZoom; editorEl.style.fontSize = `${newSize}px`; document.getElementById('line-numbers').style.fontSize = `${newSize}px`; document.getElementById('zoomLevel').textContent = `${Math.round(currentZoom * 100)}%`; }
 
 function toggleBookmark() { if (!currentFileId) return alert('파일을 선택하세요'); const file = db.files[currentFileId]; file.star = !file.star; file.updated = Date.now(); saveDB(); render(); }
