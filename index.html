@@ -177,6 +177,7 @@
       단어: <span id="statWords">0</span>
       문단: <span id="statParagraphs">0</span>
       줄: <span id="statLines">0</span>
+      발표 분량: <span id="statSpeechTime">00:00:00</span>
       용량: <span id="statSize">0 B</span>
       <div id="viewControls" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
           <button id="zoomOutBtn" title="축소">-</button>
@@ -294,30 +295,72 @@ function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 �
 function updateLineNumbers() { 
   const editor = document.getElementById('editor');
   const lineNumbersEl = document.getElementById('line-numbers');
+  
+  // Use a more robust method to count lines, handling empty lines correctly
   const lines = editor.innerText.split('\n');
-  let lineCount = lines.length;
-  // If the last line is empty and not the only line, don't count it.
-  if (lineCount > 1 && lines[lines.length - 1].trim() === '') {
-      lineCount--;
+  let lineCount = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line !== '' || (i === 0 && lines.length === 1)) {
+        lineCount++;
+    } else if (i < lines.length -1) {
+        // Only count a line if it's not the last empty line from a carriage return.
+        lineCount++;
+    }
   }
+
   const numbersHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>'); 
   lineNumbersEl.innerHTML = numbersHTML; 
   lineNumbersEl.scrollTop = editor.scrollTop;
   return lineCount;
 }
+
+// [FIX] Add speech time stat
 function updateStats() { 
   const editor = document.getElementById('editor'); 
   const text = editor.innerText || ''; 
   const html = editor.innerHTML || ''; 
-  document.getElementById('statChars').textContent = text.length.toLocaleString(); 
-  document.getElementById('statCharsNoSpace').textContent = text.replace(/\s/g, '').length.toLocaleString(); 
-  document.getElementById('statWords').textContent = (text.match(/\S+/g) || []).length.toLocaleString(); 
-  document.getElementById('statParagraphs').textContent = (text.split('\n').filter(line => line.trim() !== '')).length.toLocaleString(); 
+  const chars = text.length;
+  const charsNoSpace = text.replace(/\s/g, '').length;
+  const words = (text.match(/\S+/g) || []).length;
+  const paragraphs = (text.split('\n').filter(line => line.trim() !== '')).length;
+
+  document.getElementById('statChars').textContent = chars.toLocaleString(); 
+  document.getElementById('statCharsNoSpace').textContent = charsNoSpace.toLocaleString(); 
+  document.getElementById('statWords').textContent = words.toLocaleString(); 
+  document.getElementById('statParagraphs').textContent = paragraphs.toLocaleString(); 
+  
+  // Calculate speech time
+  const koreanRate = 250; // characters per minute
+  const englishRate = 130; // words per minute
+  
+  // A simple heuristic to check for Korean characters
+  const isKorean = /[가-힣]/.test(text);
+  
+  let totalTimeInMinutes = 0;
+  if (isKorean) {
+      // For Korean, count characters including symbols but excluding spaces
+      const koreanChars = text.replace(/[\s\n\r]/g, '');
+      totalTimeInMinutes = koreanChars.length / koreanRate;
+  } else {
+      // For English or other languages, count words
+      totalTimeInMinutes = words / englishRate;
+  }
+
+  const totalSeconds = Math.round(totalTimeInMinutes * 60);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  
+  const formattedTime = [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
+  document.getElementById('statSpeechTime').textContent = formattedTime;
+
   const sizeInBytes = new Blob([html]).size; 
   let size = `${sizeInBytes} B`; 
   if (sizeInBytes >= 1024 * 1024) size = `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`; 
   else if (sizeInBytes >= 1024) size = `${(sizeInBytes / 1024).toFixed(1)} KB`; 
   document.getElementById('statSize').textContent = size; 
+
   const lineCount = updateLineNumbers(); 
   document.getElementById('statLines').textContent = lineCount.toLocaleString(); 
 }
@@ -524,7 +567,6 @@ function updateFormattingToolbar() {
     toolbar.classList.remove('active');
   }
 }
-
 </script>
 </body>
 </html>
