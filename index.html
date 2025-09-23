@@ -155,10 +155,10 @@
           <button id="btnRenameFile" class="btn-action">변경</button>
         </div>
         <div class="group" id="formattingToolbar">
-          <button onclick="doCmd('bold')"><b>B</b></button>
-          <button onclick="doCmd('italic')"><i>I</i></button>
-          <button onclick="doCmd('underline')"><u>U</u></button>
-          <button onclick="doCmd('strikeThrough')">S</button>
+          <button onmousedown="event.preventDefault()" onclick="doCmd('bold')"><b>B</b></button>
+          <button onmousedown="event.preventDefault()" onclick="doCmd('italic')"><i>I</i></button>
+          <button onmousedown="event.preventDefault()" onclick="doCmd('underline')"><u>U</u></button>
+          <button onmousedown="event.preventDefault()" onclick="doCmd('strikeThrough')">S</button>
           <input type="color" id="colorPick" title="색상">
           <select id="fontSize">
             <option value="3">기본</option>
@@ -620,7 +620,12 @@ function updateStats() {
   const editor = document.getElementById('editor'); 
   const text = editor.innerText || ''; 
   const html = editor.innerHTML || ''; 
-  const chars = text.length;
+  
+  let chars = text.length;
+  if (editor.textContent.length === 0) {
+      chars = Math.max(0, chars - 1);
+  }
+
   const charsNoSpace = text.replace(/\s/g, '').length;
   const words = (text.match(/\S+/g) || []).length;
   const paragraphs = (text.split('\n').filter(line => line.trim() !== '')).length;
@@ -675,17 +680,13 @@ editorEl.addEventListener('paste', e => {
     document.execCommand('insertText', false, text); 
   }
 });
-editorEl.addEventListener('selectstart', () => { document.addEventListener('mouseup', handleSelection, { once: true }); });
-function handleSelection() {
-  const selection = window.getSelection();
-  if (!selection.isCollapsed) {
-    document.getElementById('colorPick').oninput = () => {
-      if (enableFormatting) {
-        document.execCommand('foreColor', false, document.getElementById('colorPick').value);
-      }
-    };
+
+document.getElementById('colorPick').addEventListener('input', (e) => {
+  if (enableFormatting) {
+    document.execCommand('foreColor', false, e.target.value);
   }
-}
+});
+
 editorEl.addEventListener('keydown', async (e) => {
     if (!enableSnippets && !enableCalculator) return;
 
@@ -1103,5 +1104,3 @@ function updateFormattingToolbar() {
 </script>
 </body>
 </html>
-"
-
