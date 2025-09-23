@@ -115,7 +115,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.5</h2>
+        <h2>Notepad v1.2.0</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">◀</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -166,12 +166,8 @@
             <option value="5">더 크게</option>
           </select>
         </div>
-        <div class="group">
-            <button id="btnSave" class="btn-action">저장</button>
-            <button id="btnExport" class="btn-action">내보내기</button>
-            <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="autoSave"> 자동저장</label>
-        </div>
         <div class="group top-right-actions">
+          <button id="btnExport" class="btn-action">내보내기</button>
           <button id="btnFindReplace" class="btn-action">찾기/바꾸기</button>
           <button id="btnBookmark" class="btn-action">⭐</button>
           <button id="btnDeleteFile" class="btn-action">삭제</button>
@@ -336,7 +332,30 @@ function renameFolder(id){ const name = prompt('새 폴더 이름:', db.folders[
 function deleteFolder(id){ if(!confirm('폴더와 그 안의 파일들을 삭제하시겠어요?')) return; Object.values(db.files).forEach(f=>{if(f.folder===id) delete db.files[f.id];}); delete db.folders[id]; db.folderOrder = (db.folderOrder||[]).filter(x=>x!==id); db.order = db.order.filter(x=>db.files[x]); saveDB(); render(); }
 function openFile(id){ currentFileId = id; const f = db.files[id]; document.getElementById('editor').innerHTML = f.content || '<div><br></div>'; document.getElementById('fileNameDisplay').textContent = f.name || ''; render(); updateStats(); }
 function renameCurrentFile(){ if(!currentFileId) return; const currentName = db.files[currentFileId].name; const newName = prompt('새 파일 이름:', currentName); if(!newName || newName.trim() === '') return alert('이름을 비울 수 없습니다'); db.files[currentFileId].name = newName.trim(); db.files[currentFileId].updated = Date.now(); saveDB(); render(); document.getElementById('fileNameDisplay').textContent = newName.trim(); }
-function saveCurrent(){ if(!currentFileId) return alert('먼저 파일을 선택하세요'); const content = document.getElementById('editor').innerHTML; const f = db.files[currentFileId]; f.content = content; f.updated = Date.now(); if(!f.name || f.name==='무제'){ const t = stripTags(content).slice(0,30).trim(); if(t) f.name = t; document.getElementById('fileNameDisplay').textContent = f.name;} saveDB(); render(); const saveBtn = document.getElementById('btnSave'); saveBtn.textContent = '✅ 저장됨'; setTimeout(() => { saveBtn.textContent = '저장'; }, 1500); }
+
+function saveCurrent() {
+    if (!currentFileId) return;
+    const editor = document.getElementById('editor');
+    if (!editor) return; 
+    const content = editor.innerHTML;
+    const f = db.files[currentFileId];
+    
+    if (!f) return;
+    if (f.content === content) return;
+
+    f.content = content;
+    f.updated = Date.now();
+    if (!f.name || f.name === '무제') {
+        const t = stripTags(content).slice(0, 30).trim();
+        if (t) {
+            f.name = t;
+            document.getElementById('fileNameDisplay').textContent = f.name;
+        }
+    }
+    saveDB();
+    render(); 
+}
+
 function deleteFileById(id){ if(!confirm('파일을 삭제할까요?')) return; delete db.files[id]; db.order = db.order.filter(x=>x!==id); if(currentFileId===id){ currentFileId=null; document.getElementById('editor').innerHTML=''; document.getElementById('fileNameDisplay').textContent=''; updateStats(); } saveDB(); render(); }
 function deleteCurrentFile(){ if(!currentFileId) return alert('파일 선택'); deleteFileById(currentFileId); }
 function toggleSelect(ev,id){ if(ev.target.checked) selectedFiles.add(id); else selectedFiles.delete(id); }
@@ -383,7 +402,38 @@ fileInput.addEventListener('change', async e => {
 });
 
 function mergeSelected(){ if(selectedFiles.size<2) return alert('두 개 이상의 파일을 선택하세요'); const ids = Array.from(selectedFiles); let merged=''; let name='병합문서'; ids.forEach(id=>{const f=db.files[id]; merged += `<h3>${escapeHtml(f.name)}</h3>` + (f.content||'') + '<hr>';}); const id = uid(); db.files[id]={id,name: name,content:merged,folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); selectedFiles.clear(); }
-function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 파일이 없습니다'); if(!confirm('선택된 파일을 삭제할까요?')) return; selectedFiles.forEach(id=>{delete db.files[id]; db.order = db.order.filter(x=>x!==id)}); saveDB(); render(); selectedFiles.clear(); }
+function deleteSelected(){ 
+    if(selectedFiles.size === 0) return alert('선택된 파일이 없습니다'); 
+    if(!confirm(`${selectedFiles.size}개의 파일을 삭제할까요?`)) return; 
+
+    const currentFileWasDeleted = selectedFiles.has(currentFileId);
+
+    selectedFiles.forEach(id => {
+        delete db.files[id];
+        db.order = db.order.filter(x => x !== id);
+    });
+    
+    if (currentFileWasDeleted) {
+        currentFileId = null;
+    }
+    
+    selectedFiles.clear();
+    saveDB(); 
+
+    if (currentFileWasDeleted) {
+        const nextFileToOpen = db.order[0] || Object.keys(db.files)[0];
+
+        if (nextFileToOpen) {
+            openFile(nextFileToOpen);
+        } else {
+            document.getElementById('editor').innerHTML = '';
+            document.getElementById('fileNameDisplay').textContent = '';
+            updateStats();
+        }
+    }
+    
+    render();
+}
 
 function updateLineNumbers() { 
   const editor = document.getElementById('editor');
@@ -442,11 +492,9 @@ function updateStats() {
   document.getElementById('statLines').textContent = lineCount.toLocaleString(); 
 }
 
-document.getElementById('btnNewFile').onclick = newFile; document.getElementById('btnNewFolder').onclick = newFolder; document.getElementById('btnRenameFile').onclick = renameCurrentFile; document.getElementById('search').addEventListener('input', render); document.getElementById('filter').addEventListener('change', render); document.getElementById('btnSave').onclick = saveCurrent; document.getElementById('btnExport').onclick = ()=>{ openSaveExportModal(); }; document.getElementById('btnMerge').onclick = mergeSelected; document.getElementById('btnDeleteSelected').onclick = deleteSelected;
-const autoSaveCb = document.getElementById('autoSave'); autoSaveCb.addEventListener('change', ()=>{ if(autoSaveCb.checked) startAutoSave(); else stopAutoSave();});
-let autoSaveTimer=null;
-function startAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer = setInterval(()=>{ if(currentFileId) saveCurrent(); }, 3000);} function stopAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer=null}
-document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); saveCurrent(); } if((e.ctrlKey||e.metaKey) && e.key==='b'){ e.preventDefault(); if (enableFormatting) doCmd('bold'); }});
+document.getElementById('btnNewFile').onclick = newFile; document.getElementById('btnNewFolder').onclick = newFolder; document.getElementById('btnRenameFile').onclick = renameCurrentFile; document.getElementById('search').addEventListener('input', render); document.getElementById('filter').addEventListener('change', render);
+document.getElementById('btnExport').onclick = ()=>{ openSaveExportModal(); }; document.getElementById('btnMerge').onclick = mergeSelected; document.getElementById('btnDeleteSelected').onclick = deleteSelected;
+
 const editorEl = document.getElementById('editor');
 editorEl.addEventListener('input', ()=>{ if(currentFileId) { db.files[currentFileId].updated=Date.now(); } updateStats(); });
 editorEl.addEventListener('scroll', () => { document.getElementById('line-numbers').scrollTop = editorEl.scrollTop; });
@@ -586,10 +634,26 @@ window.addEventListener('dragend', cleanupDragState);
 if(localStorage.getItem('wn_dark')==='1') applyDark(true);
 if(db.order && db.order.length > 0 && db.files[db.order[0]]) { openFile(db.order[0]); } else if (Object.keys(db.files).length > 0) { openFile(Object.keys(db.files)[0]); } else { updateStats(); }
 render();
+setInterval(saveCurrent, 1500);
 
 function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
-function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 및 인쇄</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"> <button id="printBtn">인쇄</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; document.getElementById('printBtn').onclick = ()=>{ printEditorContent(); closeModal(); }; }
+function openSaveExportModal(){ 
+    if(!currentFileId) return alert('파일을 선택하세요'); 
+    saveCurrent();
+    const html = `<h3>내보내기 및 인쇄</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"> <button id="printBtn">인쇄</button> <button id="exportOk">내보내기</button> </div>`; 
+    openModal(html); 
+    document.getElementById('exportOk').onclick = ()=>{ 
+        const fmts = []; 
+        if(document.getElementById('fmt_txt').checked) fmts.push('txt'); 
+        if(document.getElementById('fmt_docx').checked) fmts.push('docx'); 
+        if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); 
+        if(fmts.length===0) return alert('하나 이상 선택하세요'); 
+        downloadSelectedFormats(fmts); 
+        closeModal(); 
+    }; 
+    document.getElementById('printBtn').onclick = ()=>{ printEditorContent(); closeModal(); }; 
+}
 
 function downloadSelectedFormats(fmts) {
   if (!currentFileId) return alert('파일을 선택하세요');
@@ -844,3 +908,4 @@ function updateFormattingToolbar() {
 </script>
 </body>
 </html>
+" file.
