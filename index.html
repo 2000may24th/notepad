@@ -115,7 +115,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.5.0</h2>
+        <h2>Notepad v1.2.0</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">◀</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -445,8 +445,7 @@ editorEl.addEventListener('keydown', async (e) => {
     let replacement = '';
     let isSnippetFound = false;
     let triggerLength = 0;
-    let foundTriggerStr = '';
-
+    
     const snippetKeys = Object.values(presetSnippets)
       .filter(s => s.enabled && s.keys[0] !== '//계산식') 
       .flatMap(s => s.keys);
@@ -465,7 +464,6 @@ editorEl.addEventListener('keydown', async (e) => {
       replacement = String(result || '');
       triggerLength = foundTrigger.length;
       isSnippetFound = true;
-      foundTriggerStr = foundTrigger;
     }
 
     if (!isSnippetFound && presetSnippets['//계산식'].enabled) {
@@ -478,7 +476,6 @@ editorEl.addEventListener('keydown', async (e) => {
                   replacement = String(result);
                   triggerLength = calcMatch[0].length;
                   isSnippetFound = true;
-                  foundTriggerStr = calcMatch[0];
               }
           }
       }
@@ -488,22 +485,25 @@ editorEl.addEventListener('keydown', async (e) => {
       e.preventDefault();
       
       setTimeout(() => {
-        const currentSelection = window.getSelection();
-        if (!currentSelection.rangeCount) return;
-        const currentRange = currentSelection.getRangeAt(0);
-        const currentTextNode = currentRange.startContainer;
-        if (currentTextNode.nodeType !== Node.TEXT_NODE) return;
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
         
-        const currentCursorPos = currentRange.startOffset;
+        const range = selection.getRangeAt(0);
+        const textNode = range.startContainer;
+        const cursorPos = range.startOffset;
+
+        if (textNode.nodeType !== Node.TEXT_NODE) return;
+
+        if (cursorPos < triggerLength) return;
+
+        const triggerRange = document.createRange();
+        triggerRange.setStart(textNode, cursorPos - triggerLength);
+        triggerRange.setEnd(textNode, cursorPos);
         
-        currentRange.setStart(currentTextNode, currentCursorPos - triggerLength);
-        currentRange.setEnd(currentTextNode, currentCursorPos);
-        currentRange.deleteContents();
+        selection.removeAllRanges();
+        selection.addRange(triggerRange);
 
-        const replacementNode = document.createTextNode(replacement);
-        currentRange.insertNode(replacementNode);
-
-        currentSelection.collapse(replacementNode, replacementNode.length);
+        document.execCommand('insertText', false, replacement);
       }, 0);
     }
   }
