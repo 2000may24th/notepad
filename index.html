@@ -115,7 +115,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.5.0</h2>
+        <h2>Notepad v1.5</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">◀</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -428,7 +428,6 @@ function handleSelection() {
     };
   }
 }
-// [FIX] 스니펫 교체 로직을 Range API를 사용하도록 개선하여 안정성 확보
 editorEl.addEventListener('keydown', async (e) => {
   if (!enableSnippets || e.key !== 'Enter') return;
 
@@ -438,7 +437,6 @@ editorEl.addEventListener('keydown', async (e) => {
   const range = selection.getRangeAt(0);
   const textNode = range.startContainer;
 
-  // 스니펫은 커서가 접혀있을 때만(즉, 텍스트가 선택되지 않았을 때) 작동합니다.
   if (textNode.nodeType === Node.TEXT_NODE && range.collapsed) {
     const text = textNode.textContent;
     const cursorPosition = range.startOffset;
@@ -447,8 +445,8 @@ editorEl.addEventListener('keydown', async (e) => {
     let replacement = '';
     let isSnippetFound = false;
     let triggerLength = 0;
+    let foundTriggerStr = '';
 
-    // 1. 일반 & 커스텀 스니펫 우선 검색
     const snippetKeys = Object.values(presetSnippets)
       .filter(s => s.enabled && s.keys[0] !== '//계산식') 
       .flatMap(s => s.keys);
@@ -467,9 +465,9 @@ editorEl.addEventListener('keydown', async (e) => {
       replacement = String(result || '');
       triggerLength = foundTrigger.length;
       isSnippetFound = true;
+      foundTriggerStr = foundTrigger;
     }
 
-    // 2. 일반 스니펫이 없으면 계산기 스니펫 확인
     if (!isSnippetFound && presetSnippets['//계산식'].enabled) {
       const calcMatch = textBeforeCursor.match(/\/\/([0-9+\-*/\s.()**]+)$/);
       if (calcMatch) {
@@ -480,23 +478,33 @@ editorEl.addEventListener('keydown', async (e) => {
                   replacement = String(result);
                   triggerLength = calcMatch[0].length;
                   isSnippetFound = true;
+                  foundTriggerStr = calcMatch[0];
               }
           }
       }
     }
 
-    // 3. 스니펫이 발견되면 텍스트 교체 및 줄바꿈 방지
     if (isSnippetFound) {
       e.preventDefault();
       
-      range.setStart(textNode, cursorPosition - triggerLength);
-      range.setEnd(textNode, cursorPosition);
-      range.deleteContents();
+      setTimeout(() => {
+        const currentSelection = window.getSelection();
+        if (!currentSelection.rangeCount) return;
+        const currentRange = currentSelection.getRangeAt(0);
+        const currentTextNode = currentRange.startContainer;
+        if (currentTextNode.nodeType !== Node.TEXT_NODE) return;
+        
+        const currentCursorPos = currentRange.startOffset;
+        
+        currentRange.setStart(currentTextNode, currentCursorPos - triggerLength);
+        currentRange.setEnd(currentTextNode, currentCursorPos);
+        currentRange.deleteContents();
 
-      const replacementNode = document.createTextNode(replacement);
-      range.insertNode(replacementNode);
+        const replacementNode = document.createTextNode(replacement);
+        currentRange.insertNode(replacementNode);
 
-      selection.collapse(replacementNode, replacementNode.length);
+        currentSelection.collapse(replacementNode, replacementNode.length);
+      }, 0);
     }
   }
 });
@@ -727,6 +735,12 @@ function openSnippetModal(){
   document.getElementById('add-snippet-btn').onclick = () => {
     const trigger = document.getElementById('new-snippet-trigger').value.trim();
     const value = document.getElementById('new-snippet-value').value.trim();
+    
+    if (/\d/.test(trigger)) {
+      alert('사용자 지정 스니펫 키에는 숫자를 포함할 수 없습니다.');
+      return;
+    }
+
     if (trigger && value) {
       userSnippets.push({ trigger, value, enabled: true });
       document.getElementById('new-snippet-trigger').value = '';
