@@ -115,7 +115,7 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.2.0</h2>
+        <h2>Notepad v1.5.0</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">◀</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -212,6 +212,7 @@ const BASE_FONT_SIZE = 16; // px
 let enableFormatting = false;
 let preservePasteFormat = false;
 let enableSnippets = false;
+let enableCalculator = true;
 let userSnippets = [];
 
 const presetSnippets = {
@@ -252,9 +253,15 @@ function loadDB(){
         order: loadedDb.order || [],
         folderOrder: loadedDb.folderOrder || []
       };
+      for(const folderId in db.folders) {
+        if (!db.folders[folderId].fileOrder) {
+            db.folders[folderId].fileOrder = [];
+        }
+      }
       enableFormatting = loadedDb.settings?.enableFormatting || false;
       preservePasteFormat = loadedDb.settings?.preservePasteFormat || false;
       enableSnippets = loadedDb.settings?.enableSnippets || false;
+      enableCalculator = loadedDb.settings?.enableCalculator === false ? false : true;
       userSnippets = loadedDb.settings?.userSnippets || [];
       
       if(loadedDb.settings && loadedDb.settings.presetSnippets){
@@ -276,7 +283,7 @@ function saveDB(){
   Object.keys(presetSnippets).forEach(key => {
     presetState[key] = presetSnippets[key].enabled;
   });
-  db.settings = { enableFormatting, preservePasteFormat, enableSnippets, userSnippets, presetSnippets: presetState };
+  db.settings = { enableFormatting, preservePasteFormat, enableSnippets, enableCalculator, userSnippets, presetSnippets: presetState };
   localStorage.setItem(DB_KEY, JSON.stringify(db)); 
 }
 function uid(prefix='f'){return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
@@ -288,12 +295,108 @@ function allowDrop(e){ e.preventDefault(); e.currentTarget.classList.add('drop-t
 function onContainerDragLeave(e) { e.currentTarget.classList.remove('drop-target'); }
 function onDragStart(ev, id, type){ dragId = id; dragType = type; ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
 function cleanupDragState() { document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); dragId = null; dragType = null;}
-function onDrop(ev, targetId) { ev.preventDefault(); ev.stopPropagation(); const targetIsFolder = ev.currentTarget.classList.contains('folder'); if (dragType === 'file' && !targetIsFolder) { const file = db.files[dragId]; if (file.folder) file.folder = null; reorderFile(dragId, targetId); } else if (dragType === 'folder' && targetIsFolder) { reorderFolder(dragId, targetId); } render(); cleanupDragState();}
-function onFileContainerDrop(ev) { ev.preventDefault(); if (dragType === 'file') { const file = db.files[dragId]; if (file.folder) file.folder = null; reorderFile(dragId, null); render(); } cleanupDragState(); }
-function onFolderContainerDrop(ev) { ev.preventDefault(); if (dragType === 'folder') { reorderFolder(dragId, null); render(); } cleanupDragState(); }
-function onFolderDrop(ev, folderId){ ev.preventDefault(); ev.stopPropagation(); if(dragType==='file' && dragId && db.files[dragId]){ db.files[dragId].folder = folderId; db.files[dragId].updated = Date.now(); db.order = db.order.filter(id => id !== dragId); saveDB(); render(); } cleanupDragState();}
-function reorderFile(dragIdLocal, targetId){ const idx = db.order.indexOf(dragIdLocal); if(idx>-1) db.order.splice(idx,1); if(targetId){ const ti = db.order.indexOf(targetId); db.order.splice(ti,0,dragIdLocal); } else { db.order.push(dragIdLocal); } saveDB();}
-function reorderFolder(dragIdLocal, targetId){ const arr = db.folderOrder; const idx = arr.indexOf(dragIdLocal); if(idx>-1) arr.splice(idx,1); if(targetId){ const ti = arr.indexOf(targetId); arr.splice(ti,0,dragIdLocal); } else { arr.push(dragIdLocal); } db.folderOrder = arr; saveDB();}
+
+function reorderFile(draggedId, targetId, folderId = null) {
+    const sourceList = folderId ? db.folders[folderId].fileOrder : db.order;
+    const targetList = folderId ? db.folders[folderId].fileOrder : db.order;
+
+    const dragIndex = sourceList.indexOf(draggedId);
+    if (dragIndex > -1) {
+        sourceList.splice(dragIndex, 1);
+    }
+
+    if (targetId) {
+        const targetIndex = targetList.indexOf(targetId);
+        targetList.splice(targetIndex, 0, draggedId);
+    } else {
+        targetList.push(draggedId);
+    }
+}
+
+function onDrop(ev, targetId) { 
+    ev.preventDefault(); 
+    ev.stopPropagation(); 
+    const targetFile = db.files[targetId];
+    const draggedFile = db.files[dragId];
+
+    if (dragType === 'file' && draggedFile) {
+        if(draggedFile.folder) {
+            const folder = db.folders[draggedFile.folder];
+            folder.fileOrder = folder.fileOrder.filter(id => id !== dragId);
+        } else {
+            db.order = db.order.filter(id => id !== dragId);
+        }
+        
+        draggedFile.folder = targetFile ? targetFile.folder : null;
+
+        if (targetFile && targetFile.folder) {
+            reorderFile(dragId, targetId, targetFile.folder);
+        } else {
+            reorderFile(dragId, targetId, null);
+        }
+
+    } else if (dragType === 'folder') {
+        const arr = db.folderOrder; 
+        const idx = arr.indexOf(dragId); 
+        if(idx>-1) arr.splice(idx,1); 
+        if(targetId){ 
+            const ti = arr.indexOf(targetId); 
+            arr.splice(ti,0,dragId); 
+        } else { 
+            arr.push(dragId); 
+        } 
+        db.folderOrder = arr; 
+    }
+    saveDB(); 
+    render(); 
+    cleanupDragState();
+}
+
+function onFileContainerDrop(ev) { 
+    ev.preventDefault(); 
+    if (dragType === 'file') { 
+        const file = db.files[dragId]; 
+        if (file.folder) {
+            const oldFolder = db.folders[file.folder];
+            if(oldFolder && oldFolder.fileOrder) {
+                oldFolder.fileOrder = oldFolder.fileOrder.filter(id => id !== dragId);
+            }
+            file.folder = null; 
+        }
+        reorderFile(dragId, null, null); 
+        saveDB();
+        render(); 
+    } 
+    cleanupDragState(); 
+}
+
+function onFolderDrop(ev, folderId){ 
+    ev.preventDefault(); 
+    ev.stopPropagation(); 
+    if(dragType==='file' && dragId && db.files[dragId]){ 
+        const file = db.files[dragId];
+        if (file.folder && db.folders[file.folder] && db.folders[file.folder].fileOrder) {
+            db.folders[file.folder].fileOrder = db.folders[file.folder].fileOrder.filter(id => id !== dragId);
+        } else {
+            db.order = db.order.filter(id => id !== dragId);
+        }
+
+        file.folder = folderId; 
+        file.updated = Date.now(); 
+        
+        const targetFolder = db.folders[folderId];
+        if (!targetFolder.fileOrder) {
+            targetFolder.fileOrder = [];
+        }
+        targetFolder.fileOrder.push(dragId);
+
+        saveDB(); 
+        render(); 
+    } 
+    cleanupDragState();
+}
+
+function onFolderContainerDrop(ev) { ev.preventDefault(); if (dragType === 'folder') { reorderFile(dragId, null); render(); } cleanupDragState(); }
 
 function render(){ renderFolders(); renderFiles(); updateBookmarkButtonState(); updateFormattingToolbar();}
 function renderFileItem(file) { const starIcon = file.star ? '⭐' : ''; return `<div class="meta"><div class="name">${starIcon} ${escapeHtml(file.name)}</div><div class="sub">${new Date(file.updated).toLocaleString('ko-KR', {dateStyle: 'short', timeStyle: 'short'})}</div></div><div class="actions"><input type="checkbox" onchange="toggleSelect(event,'${file.id}')" ${selectedFiles.has(file.id)?'checked':''}></div>`;}
@@ -305,9 +408,26 @@ function renderFolders(){
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     const toggleIcon = f._open ? '▾' : '▸';
     el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"handleMobileFileOpen(event, () => openFile('${f.id}'))\">${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
-    el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder'); el.ondragover = allowDrop; el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); el.ondrop = (ev) => { if (dragType === 'file') onFolderDrop(ev, f.id); else onDrop(ev, f.id); };
+    el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder'); el.ondragover = allowDrop; el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); el.ondrop = (ev) => onDrop(ev, f.id);
     const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
-    Object.values(db.files).forEach(file => { if(file.folder === f.id) { const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id; if(file.id === currentFileId) { fi.classList.add('active-file'); } fi.innerHTML = renderFileItem(file); fi.onclick = (e) => { if(e.target.type !== 'checkbox') handleMobileFileOpen(e, () => openFile(file.id)); }; fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); children.appendChild(fi); }});
+    
+    (f.fileOrder || []).forEach(fileId => {
+        const file = db.files[fileId];
+        if (file) {
+            const fi = document.createElement('div'); 
+            fi.className='file-item draggable'; 
+            fi.dataset.id = file.id; 
+            if(file.id === currentFileId) { fi.classList.add('active-file'); } 
+            fi.innerHTML = renderFileItem(file); 
+            fi.onclick = (e) => { if(e.target.type !== 'checkbox') handleMobileFileOpen(e, () => openFile(file.id)); }; 
+            fi.draggable=true; 
+            fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); 
+            fi.ondragover=allowDrop;
+            fi.ondrop=(ev)=>onDrop(ev, file.id);
+            children.appendChild(fi); 
+        }
+    });
+
     cont.appendChild(el); cont.appendChild(children);
   });
 }
@@ -324,9 +444,9 @@ function handleMobileFileOpen(event, openFn) { openFn(); if (window.innerWidth <
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c])}
 function stripTags(html){return html.replace(/<[^>]+>/g,'')}
 function newFile(){ const name = prompt('새 파일 이름:'); if(!name || name.trim() === '') return; const id=uid(); db.files[id]={id,name:name.trim(),content:'<div><br></div>',folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.unshift(id); saveDB(); render(); openFile(id); }
-function newFolder(){ const name = prompt('폴더 이름:'); if(!name) return; const id=uid('d'); db.folders[id]={id,name}; if(!db.folderOrder) db.folderOrder=[]; db.folderOrder.push(id); saveDB(); render(); }
+function newFolder(){ const name = prompt('폴더 이름:'); if(!name) return; const id=uid('d'); db.folders[id]={id,name, fileOrder:[]}; if(!db.folderOrder) db.folderOrder=[]; db.folderOrder.push(id); saveDB(); render(); }
 function toggleFolder(id){ db.folders[id]._open = !db.folders[id]._open; saveDB(); render(); }
-function openFolder(id){ db.folders[id]._open = !db.folders[id]._open; saveDB(); render(); }
+function openFolder(id){ openFile(id) }
 function renameFolder(id){ const name = prompt('새 폴더 이름:', db.folders[id].name); if(!name) return; db.folders[id].name=name; saveDB(); render(); }
 function deleteFolder(id){ if(!confirm('폴더와 그 안의 파일들을 삭제하시겠어요?')) return; Object.values(db.files).forEach(f=>{if(f.folder===id) delete db.files[f.id];}); delete db.folders[id]; db.folderOrder = (db.folderOrder||[]).filter(x=>x!==id); db.order = db.order.filter(x=>db.files[x]); saveDB(); render(); }
 
@@ -334,10 +454,12 @@ function openFile(id){
     saveCurrent();
     currentFileId = id; 
     const f = db.files[id]; 
-    document.getElementById('editor').innerHTML = f.content || '<div><br></div>'; 
-    document.getElementById('fileNameDisplay').textContent = f.name || ''; 
-    render(); 
-    updateStats(); 
+    if(f) {
+        document.getElementById('editor').innerHTML = f.content || '<div><br></div>'; 
+        document.getElementById('fileNameDisplay').textContent = f.name || ''; 
+        render(); 
+        updateStats(); 
+    }
 }
 
 function renameCurrentFile(){ if(!currentFileId) return; const currentName = db.files[currentFileId].name; const newName = prompt('새 파일 이름:', currentName); if(!newName || newName.trim() === '') return alert('이름을 비울 수 없습니다'); db.files[currentFileId].name = newName.trim(); db.files[currentFileId].updated = Date.now(); saveDB(); render(); document.getElementById('fileNameDisplay').textContent = newName.trim(); }
@@ -418,6 +540,13 @@ function deleteSelected(){
     const currentFileWasDeleted = selectedFiles.has(currentFileId);
 
     selectedFiles.forEach(id => {
+        const file = db.files[id];
+        if (file.folder) {
+            const folder = db.folders[file.folder];
+            if (folder && folder.fileOrder) {
+                folder.fileOrder = folder.fileOrder.filter(fileId => fileId !== id);
+            }
+        }
         delete db.files[id];
         db.order = db.order.filter(x => x !== id);
     });
@@ -527,7 +656,9 @@ function handleSelection() {
   }
 }
 editorEl.addEventListener('keydown', async (e) => {
-    if (!enableSnippets) return;
+    if (!enableSnippets && !enableCalculator) return;
+
+    if (e.key !== ' ') return;
 
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
@@ -537,57 +668,69 @@ editorEl.addEventListener('keydown', async (e) => {
     if (textNode.nodeType !== Node.TEXT_NODE) return;
     const textBeforeCursor = textNode.textContent.substring(0, range.startOffset);
 
-    // Snippet logic for space key
-    if (e.key === ' ') {
-        const snippetKeys = Object.values(presetSnippets).flatMap(s => s.keys);
+    let isSnippetFound = false;
+    let replacementText = '';
+    let triggerLength = 0;
+    
+    // Calculator logic
+    if (enableCalculator) {
+        const calcMatch = textBeforeCursor.match(/=([0-9+\-*/\s.()**]+)=$/);
+        if (calcMatch) {
+            const expr = calcMatch[1];
+            try {
+                replacementText = String(eval(expr));
+                if (isNaN(replacementText)) replacementText = '유효하지 않은 수식';
+            } catch (err) {
+                replacementText = '계산 오류';
+            }
+            triggerLength = calcMatch[0].length;
+            isSnippetFound = true;
+        }
+    }
+
+    // General snippet logic
+    if (!isSnippetFound && enableSnippets) {
+        const snippetKeys = Object.values(presetSnippets).flatMap(s => s.enabled ? s.keys : []);
         const userSnippetTriggers = userSnippets.filter(s => s.enabled).map(s => s.trigger);
         const allTriggers = [...snippetKeys, ...userSnippetTriggers].sort((a, b) => b.length - a.length);
         const foundTrigger = allTriggers.find(trigger => textBeforeCursor.endsWith(trigger));
 
         if (foundTrigger) {
-            e.preventDefault();
-            
             const preset = Object.values(presetSnippets).find(s => s.keys.includes(foundTrigger));
             const user = userSnippets.find(s => s.trigger === foundTrigger);
             const snippetValue = preset ? preset.value : user.value;
-            
-            const replacementText = await Promise.resolve(
+
+            replacementText = await Promise.resolve(
                 typeof snippetValue === 'function' ? snippetValue() : snippetValue
             );
-            
-            const currentRange = selection.getRangeAt(0);
-            currentRange.setStart(textNode, range.startOffset - foundTrigger.length);
-            currentRange.setEnd(textNode, range.startOffset);
-            
-            selection.removeAllRanges();
-            selection.addRange(currentRange);
-            document.execCommand('insertText', false, String(replacementText || ''));
+            replacementText = String(replacementText || '');
+            triggerLength = foundTrigger.length;
+            isSnippetFound = true;
         }
     }
 
-    // Calculator logic for equals key
-    if (e.key === '=') {
-        const calcMatch = textBeforeCursor.match(/=([0-9+\-*/\s.()**]+)$/);
-        if (calcMatch) {
-            e.preventDefault();
-            const expr = calcMatch[1];
-            let result;
-            try {
-                result = eval(expr);
-                if (isNaN(result)) result = '유효하지 않은 수식';
-            } catch (err) {
-                result = '계산 오류';
-            }
-            
-            const triggerLength = calcMatch[0].length;
-            const currentRange = selection.getRangeAt(0);
-            currentRange.setStart(textNode, range.startOffset - triggerLength);
-            currentRange.setEnd(textNode, range.startOffset);
+    if (isSnippetFound) {
+        e.preventDefault();
+        
+        // Timeout helps with IME composition issues
+        setTimeout(() => {
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            const range = selection.getRangeAt(0);
+            const textNode = range.startContainer;
+
+            if (textNode.nodeType !== Node.TEXT_NODE) return;
+            const cursorPos = range.startOffset;
+            if (cursorPos < triggerLength) return;
+
+            const triggerRange = document.createRange();
+            triggerRange.setStart(textNode, cursorPos - triggerLength);
+            triggerRange.setEnd(textNode, cursorPos);
             
             selection.removeAllRanges();
-            selection.addRange(currentRange);
-            document.execCommand('insertText', false, String(result));
-        }
+            selection.addRange(triggerRange);
+            document.execCommand('insertText', false, replacementText);
+        }, 0);
     }
 });
 
@@ -744,7 +887,14 @@ function openMainSettingsModal(){
         <input type="checkbox" id="setting_snippets"> 
       </label>
       <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
-        단축키로 텍스트를 자동 변환하는 스니펫 기능을 (비)활성화합니다.
+        단축키로 텍스트를 자동 변환하는 스니펫 기능을 (비)활성화합니다. (예: /날짜/)
+      </div>
+      <label style="display:flex; align-items:center; justify-content: space-between;"> 
+        <span>계산기 스니펫</span> 
+        <input type="checkbox" id="setting_calculator"> 
+      </label>
+      <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
+        간단한 사칙연산을 수행합니다. (예: =10*5= 입력 후 스페이스바)
       </div>
 
       <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> 
@@ -778,6 +928,12 @@ function openMainSettingsModal(){
   document.getElementById('setting_snippets').checked = enableSnippets;
   document.getElementById('setting_snippets').onchange = (e) => {
     enableSnippets = e.target.checked;
+    saveDB();
+  };
+  
+  document.getElementById('setting_calculator').checked = enableCalculator;
+  document.getElementById('setting_calculator').onchange = (e) => {
+    enableCalculator = e.target.checked;
     saveDB();
   };
   
