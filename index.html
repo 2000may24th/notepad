@@ -255,14 +255,14 @@ function updateStats() { const editor = document.getElementById('editor'); const
 document.getElementById('btnNewFile').onclick = newFile; document.getElementById('btnNewFolder').onclick = newFolder; document.getElementById('btnRenameFile').onclick = renameCurrentFile; document.getElementById('search').addEventListener('input', render); document.getElementById('filter').addEventListener('change', render); document.getElementById('btnSave').onclick = saveCurrent; document.getElementById('btnExport').onclick = ()=>{ openSaveExportModal(); }; document.getElementById('btnMerge').onclick = mergeSelected; document.getElementById('btnDeleteSelected').onclick = deleteSelected;
 const autoSaveCb = document.getElementById('autoSave'); autoSaveCb.addEventListener('change', ()=>{ if(autoSaveCb.checked) startAutoSave(); else stopAutoSave();});
 let autoSaveTimer=null;
-function startAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer = setInterval(()=>{ if(currentFileId) saveCurrent(); }, 3000);} function stopAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer=null}
+function startAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer = setInterval(()=>{ if(currentFileId) saveCurrent(); }, 60000);} function stopAutoSave(){ if(autoSaveTimer) clearInterval(autoSaveTimer); autoSaveTimer=null}
 document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); saveCurrent(); } if((e.ctrlKey||e.metaKey) && e.key==='b'){ e.preventDefault(); doCmd('bold'); }});
 const editorEl = document.getElementById('editor');
 editorEl.addEventListener('input', ()=>{ if(currentFileId) { db.files[currentFileId].updated=Date.now(); } updateStats(); });
 editorEl.addEventListener('scroll', () => { document.getElementById('line-numbers').scrollTop = editorEl.scrollTop; });
 editorEl.addEventListener('paste', e => { e.preventDefault(); const text = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, text); });
 const appRoot = document.getElementById('appRoot'); const toggleSidebarBtn = document.getElementById('toggleSidebarBtn'); const expandHandle = document.getElementById('expandHandle');
-function toggleSidebar() { const isHidden = appRoot.classList.toggle('sidebar-hidden'); toggleSidebarBtn.textContent = isHidden ? '➡' : '⬅'; toggleSidebarBtn.title = isHidden ? '사이드바 펼치기' : '사이드바 숨기기'; }
+function toggleSidebar() { const isHidden = appRoot.classList.toggle('sidebar-hidden'); toggleSidebarBtn.textContent = isHidden ? '▶' : '◀'; toggleSidebarBtn.title = isHidden ? '사이드바 펼치기' : '사이드바 숨기기'; }
 toggleSidebarBtn.addEventListener('click', toggleSidebar); expandHandle.addEventListener('click', toggleSidebar);
 
 const sidebar = document.getElementById('sidebar');
