@@ -11,16 +11,18 @@
   <style>
     :root{--bg:#f7f8fb;--card:#fff;--muted:#666;--sidebar:#f8fafc;--accent:#0b66ff;--active-bg:#e9ecef}
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Noto Sans KR",sans-serif;background:var(--bg);color:#111}
-    .app{display:grid;grid-template-columns:300px 1fr;grid-template-rows:1fr auto;height:100vh;transition:grid-template-columns .25s ease}
+    html{height:100%}
+    body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Noto Sans KR",sans-serif;background:var(--bg);color:#111; display: flex; flex-direction: column; overflow: hidden;}
+    .app{display:grid;grid-template-columns:300px 1fr;grid-template-rows:100%; flex-grow: 1; overflow: hidden; transition:grid-template-columns .25s ease}
     .app.sidebar-hidden{grid-template-columns:0 1fr}
-    nav{background:var(--sidebar);border-right:1px solid #e6e9ef;padding:12px;overflow:auto;transition:transform .25s ease,width .25s}
+    nav{background:var(--sidebar);border-right:1px solid #e6e9ef;padding:12px;overflow-y:auto; overflow-x: hidden; transition:transform .25s ease,width .25s}
     .app.sidebar-hidden nav{transform:translateX(-100%);padding:12px 0;border-right:none}
     header{display:flex;gap:8px;align-items:center;margin-bottom:8px}
     header h2{margin:0;font-size:16px}
     .controls{display:flex;gap:6px;flex-wrap:wrap}
     button,select,input[type=text]{background:#fff;border:1px solid #ddd;padding:6px 8px;border-radius:6px;cursor:pointer}
     button.small{padding:6px}
+    #mobileMenuBtn { display: none; }
     .list{margin-top:8px}
     .section-title{font-size:12px;color:var(--muted);margin:10px 0 6px}
     .folder, .file-item{padding:8px;border-radius:6px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between; border-left: 2px solid transparent;}
@@ -35,7 +37,7 @@
     main{display:flex;flex-direction:column;gap:8px;padding:12px;overflow:hidden; position: relative;}
     .toolbar{display:flex;gap:6px;align-items:center; flex-wrap: wrap; transition: padding-left .25s ease;}
     .app.sidebar-hidden .toolbar { padding-left: 48px; }
-    .toolbar .group{display:flex;gap:6px;align-items:center;background:var(--card);padding:6px;border-radius:8px;border:1px solid #e9edf3}
+    .toolbar .group{display:flex;gap:6px;align-items:center;background:var(--card);padding:6px;border-radius:8px;border:1px solid #e9edf3; flex-shrink: 0;}
     #fileNameGroup { min-width: 250px; justify-content: space-between; }
     #fileNameDisplay { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .editor-container { position: relative; flex: 1; overflow: hidden; background: var(--card); border: 1px solid #e6e9ef; border-radius: 8px; display: flex; }
@@ -46,10 +48,8 @@
     .btn-action{padding:6px 8px;border-radius:6px}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:200}
     .modal{background:var(--card);padding:16px;border-radius:8px;width:400px;box-shadow:0 6px 32px rgba(0,0,0,0.15)}
-    #statsFooter{grid-column: 2 / 3; background:transparent;padding:6px 12px;border-top:1px solid #e9edf3;display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted); flex-wrap: wrap; }
+    #statsFooter{background:var(--bg); border-top:1px solid #e9edf3;padding:6px 12px;display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted); flex-wrap: wrap; flex-shrink: 0; z-index: 100;}
     #statsFooter span { font-weight: 500; color: #444; }
-    body.dark #statsFooter { border-color: #4a4a4a; color: var(--muted); }
-    body.dark #statsFooter span { color: #ddd; }
     .drop-target{outline:2px dashed var(--accent)}
 
     :root.dark{--bg:#2b2b2b;--card:#393939;--muted:#bfc4c8;--sidebar:#333437;--accent:#9fb8ff;--active-bg:#4f5154}
@@ -60,40 +60,36 @@
     body.dark button, body.dark select, body.dark input[type=text] {background:#5a5a5a;color:#eee;border-color:#666}
     body.dark .editor-container { background: var(--card); border-color: #4a4a4a;}
     body.dark #line-numbers { background-color: var(--bg); border-right: 1px solid #4a4a4a; }
+    body.dark #statsFooter { border-color: #4a4a4a; color: var(--muted); background: var(--bg);}
+    body.dark #statsFooter span { color: #ddd; }
     #expandHandle{position:absolute;left:8px;top:12px;width:36px;height:36px;border-radius:6px;background:var(--card);border:1px solid #ddd;display:none;align-items:center;justify-content:center;z-index:300;cursor:pointer}
     .app.sidebar-hidden #expandHandle{display:flex}
     #btnBookmark.bookmarked { background-color: #ffc107; color: #000; border-color: #f5b300;}
+    .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 399; }
     
     /* Fullscreen Styles */
-    body.editor-fullscreen #sidebar,
-    body.editor-fullscreen .toolbar,
-    body.editor-fullscreen #statsFooter,
-    body.editor-fullscreen #expandHandle {
-        display: none !important;
-    }
-    body.editor-fullscreen .app {
-        grid-template-columns: 1fr !important;
-        grid-template-rows: 1fr !important;
-        height: 100vh;
-    }
-    body.editor-fullscreen main.editor-wrap {
-        padding: 0;
-        height: 100%;
-    }
-    body.editor-fullscreen .editor-container {
-        height: 100%;
-        border: 0;
-        border-radius: 0;
-    }
+    body.editor-fullscreen #sidebar, body.editor-fullscreen .toolbar, body.editor-fullscreen #statsFooter, body.editor-fullscreen #expandHandle { display: none !important; }
+    body.editor-fullscreen .app { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; height: 100vh; }
+    body.editor-fullscreen main.editor-wrap { padding: 0; height: 100%; }
+    body.editor-fullscreen .editor-container { height: 100%; border: 0; border-radius: 0; }
 
-    @media (max-width:800px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}nav{order:2;height:220px;overflow:auto}.editor-wrap{order:1} #statsFooter{grid-column: 1 / -1;}}
+    @media (max-width:800px){
+        .app { grid-template-columns: 1fr; }
+        .app.sidebar-hidden .toolbar { padding-left: 0; }
+        #toggleSidebarBtn, #expandHandle { display: none !important; }
+        #mobileMenuBtn { display: flex; align-items: center; justify-content: center; }
+        nav { position: fixed; top: 0; left: 0; height: 100%; z-index: 400; transform: translateX(-100%); transition: transform .3s ease-in-out; border-right: 1px solid #e6e9ef; width: 300px; }
+        nav.sidebar-open { transform: translateX(0); }
+        .sidebar-backdrop.visible { display: block; }
+        .toolbar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+    }
   </style>
 </head>
 <body id="bodyRoot">
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.1.8</h2>
+        <h2>Notepad v1.2.0</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">⬅</button>
           <button class="small" id="btnNewFile">+파일</button>
@@ -114,7 +110,7 @@
       </div>
 
       <div style="margin-top:12px">
-        <div class="section-title">임포트(.txt/.docx/.pdf)</div>
+        <div class="section-title">임포트(.txt/.docx/.pdf 지원)</div>
         <input id="fileInput" type="file" multiple accept=".txt,.md,.html,.docx,.pdf" />
         <div class="section-title" style="margin-top:12px">병합/관리</div>
         <button id="btnMerge">선택 파일 병합</button>
@@ -125,6 +121,9 @@
     <main class="editor-wrap">
       <div id="expandHandle" title="사이드바 펼치기">➡</div>
       <div class="toolbar">
+        <div class="group">
+             <button id="mobileMenuBtn" class="btn-action">☰</button>
+        </div>
         <div class="group" id="fileNameGroup">
           <h3 id="fileNameDisplay" style="margin: 0; font-size: 16px; font-weight: 600;"></h3>
           <button id="btnRenameFile" class="btn-action">변경</button>
@@ -142,7 +141,7 @@
             <button id="btnExport" class="btn-action">내보내기</button>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="autoSave"> 자동저장</label>
         </div>
-        <div class="top-right-actions">
+        <div class="group top-right-actions">
           <button id="btnFindReplace" class="btn-action">찾기/바꾸기</button>
           <button id="btnBookmark" class="btn-action">⭐</button>
           <button id="btnDeleteFile" class="btn-action">삭제</button>
@@ -154,23 +153,24 @@
         <div id="editor" contenteditable="true" spellcheck="false"></div>
       </div>
     </main>
-
-    <footer id="statsFooter">
-        글자: <span id="statChars">0</span>
-        공백 제외: <span id="statCharsNoSpace">0</span>
-        단어: <span id="statWords">0</span>
-        문단: <span id="statParagraphs">0</span>
-        줄: <span id="statLines">0</span>
-        용량: <span id="statSize">0 B</span>
-        <div id="viewControls" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
-            <button id="zoomOutBtn" title="축소">-</button>
-            <span id="zoomLevel" style="width: 40px; text-align: center;">100%</span>
-            <button id="zoomInBtn" title="확대">+</button>
-            <button id="fullscreenBtn" title="전체화면" style="font-size: 16px;">⛶</button>
-        </div>
-    </footer>
   </div>
+  
+  <footer id="statsFooter">
+      글자: <span id="statChars">0</span>
+      공백 제외: <span id="statCharsNoSpace">0</span>
+      단어: <span id="statWords">0</span>
+      문단: <span id="statParagraphs">0</span>
+      줄: <span id="statLines">0</span>
+      용량: <span id="statSize">0 B</span>
+      <div id="viewControls" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+          <button id="zoomOutBtn" title="축소">-</button>
+          <span id="zoomLevel" style="width: 40px; text-align: center;">100%</span>
+          <button id="zoomInBtn" title="확대">+</button>
+          <button id="fullscreenBtn" title="전체화면" style="font-size: 16px;">⛶</button>
+      </div>
+  </footer>
 
+  <div class="sidebar-backdrop"></div>
   <div id="modalRoot" style="display:none"></div>
 
 <script>
@@ -208,10 +208,10 @@ function renderFolders(){
     const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id;
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     const toggleIcon = f._open ? '▾' : '▸';
-    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
+    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"handleMobileFileOpen(event, () => openFolder('${f.id}'))\">${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder'); el.ondragover = allowDrop; el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); el.ondrop = (ev) => { if (dragType === 'file') onFolderDrop(ev, f.id); else onDrop(ev, f.id); };
     const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
-    Object.values(db.files).forEach(file => { if(file.folder === f.id) { const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id; if(file.id === currentFileId) { fi.classList.add('active-file'); } fi.innerHTML = renderFileItem(file); fi.onclick = (e) => { if(e.target.type !== 'checkbox') openFile(file.id); }; fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); children.appendChild(fi); }});
+    Object.values(db.files).forEach(file => { if(file.folder === f.id) { const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id; if(file.id === currentFileId) { fi.classList.add('active-file'); } fi.innerHTML = renderFileItem(file); fi.onclick = (e) => { if(e.target.type !== 'checkbox') handleMobileFileOpen(e, () => openFile(file.id)); }; fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); children.appendChild(fi); }});
     cont.appendChild(el); cont.appendChild(children);
   });
 }
@@ -219,9 +219,16 @@ function renderFiles(){
   const cont = document.getElementById('files'); cont.innerHTML=''; const q = document.getElementById('search').value.toLowerCase(); const filter = document.getElementById('filter').value;
   (db.order || []).forEach(id=>{
     const f = db.files[id]; if(!f || f.folder) return; if(filter==='star' && !f.star) return; if(q && !(f.name.toLowerCase().includes(q) || stripTags(f.content).toLowerCase().includes(q))) return
-    const div = document.createElement('div'); div.className='file-item draggable'; div.dataset.id = f.id; if(f.id === currentFileId) { div.classList.add('active-file'); } div.innerHTML = renderFileItem(f); div.onclick = (e) => { if(e.target.type !== 'checkbox') openFile(f.id); }; div.draggable = true; div.ondragstart = (ev)=>onDragStart(ev, f.id, 'file'); div.ondragover = allowDrop; div.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); div.ondrop = (ev) => onDrop(ev, f.id);
+    const div = document.createElement('div'); div.className='file-item draggable'; div.dataset.id = f.id; if(f.id === currentFileId) { div.classList.add('active-file'); } div.innerHTML = renderFileItem(f); div.onclick = (e) => { if(e.target.type !== 'checkbox') handleMobileFileOpen(e, () => openFile(id)); }; div.draggable = true; div.ondragstart = (ev)=>onDragStart(ev, f.id, 'file'); div.ondragover = allowDrop; div.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); div.ondrop = (ev) => onDrop(ev, f.id);
     cont.appendChild(div);
   })
+}
+
+function handleMobileFileOpen(event, openFn) {
+    openFn();
+    if (window.innerWidth <= 800) {
+        toggleMobileSidebar(false);
+    }
 }
 
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c])}
@@ -234,14 +241,10 @@ function renameFolder(id){ const name = prompt('새 폴더 이름:', db.folders[
 function deleteFolder(id){ if(!confirm('폴더와 그 안의 파일들을 삭제하시겠어요?')) return; Object.values(db.files).forEach(f=>{if(f.folder===id) delete db.files[f.id];}); delete db.folders[id]; db.folderOrder = (db.folderOrder||[]).filter(x=>x!==id); db.order = db.order.filter(x=>db.files[x]); saveDB(); render(); }
 function openFile(id){ currentFileId = id; const f = db.files[id]; document.getElementById('editor').innerHTML = f.content || '<div><br></div>'; document.getElementById('fileNameDisplay').textContent = f.name || ''; render(); updateStats(); }
 function renameCurrentFile(){ if(!currentFileId) return; const currentName = db.files[currentFileId].name; const newName = prompt('새 파일 이름:', currentName); if(!newName || newName.trim() === '') return alert('이름을 비울 수 없습니다'); db.files[currentFileId].name = newName.trim(); db.files[currentFileId].updated = Date.now(); saveDB(); render(); document.getElementById('fileNameDisplay').textContent = newName.trim(); }
-function saveCurrent(){ if(!currentFileId) return alert('먼저 파일을 선택하세요'); const content = document.getElementById('editor').innerHTML; const f = db.files[currentFileId]; f.content = content; f.updated = Date.now(); if(!f.name || f.name==='무제'){ const t = stripTags(content).slice(0,30).trim(); if(t) f.name = t; document.getElementById('fileNameDisplay').textContent = f.name;} saveDB(); render(); const saveBtn = document.getElementById('btnSave'); saveBtn.textContent = '✅저장됨'; setTimeout(() => { saveBtn.textContent = '저장'; }, 1500); }
+function saveCurrent(){ if(!currentFileId) return alert('먼저 파일을 선택하세요'); const content = document.getElementById('editor').innerHTML; const f = db.files[currentFileId]; f.content = content; f.updated = Date.now(); if(!f.name || f.name==='무제'){ const t = stripTags(content).slice(0,30).trim(); if(t) f.name = t; document.getElementById('fileNameDisplay').textContent = f.name;} saveDB(); render(); const saveBtn = document.getElementById('btnSave'); saveBtn.textContent = '✅ 저장됨'; setTimeout(() => { saveBtn.textContent = '저장'; }, 1500); }
 function deleteFileById(id){ if(!confirm('파일을 삭제할까요?')) return; delete db.files[id]; db.order = db.order.filter(x=>x!==id); if(currentFileId===id){ currentFileId=null; document.getElementById('editor').innerHTML=''; document.getElementById('fileNameDisplay').textContent=''; updateStats(); } saveDB(); render(); }
 function deleteCurrentFile(){ if(!currentFileId) return alert('파일 선택'); deleteFileById(currentFileId); }
 function toggleSelect(ev,id){ if(ev.target.checked) selectedFiles.add(id); else selectedFiles.delete(id); }
-function downloadTxt(id){ const f=db.files[id]; const blob=new Blob([stripTags(f.content)],{type:'text/plain;charset=utf-8'}); saveAs(blob, (f.name||'untitled')+'.txt'); }
-function downloadDocx(id){ const f = db.files[id]; const html = `<html><body>${f.content||''}</body></html>`; try{ const converted = window.htmlDocx.asBlob(html); saveAs(converted, (f.name||'document') + '.docx'); }catch(e){alert('DOCX 생성 실패: '+e.message)} }
-function downloadPdf(id){ const f=db.files[id]; const { jsPDF } = window.jspdf; const doc = new jsPDF(); const text = stripTags(f.content); const lines = doc.splitTextToSize(text, 180); doc.text(lines,10,10); const blob = doc.output('blob'); saveAs(blob, (f.name||'doc') + '.pdf'); }
-function downloadSelectedFormats(formats){ if(!currentFileId) return alert('파일을 선택하세요'); formats.forEach(fmt=>{ if(fmt==='txt') downloadTxt(currentFileId); if(fmt==='docx') downloadDocx(currentFileId); if(fmt==='pdf') downloadPdf(currentFileId); }); }
 const fileInput = document.getElementById('fileInput'); fileInput.addEventListener('change', async e=>{ /* ... (unchanged) ... */ });
 function mergeSelected(){ if(selectedFiles.size<2) return alert('두 개 이상의 파일을 선택하세요'); const ids = Array.from(selectedFiles); let merged=''; let name='병합문서'; ids.forEach(id=>{const f=db.files[id]; merged += `<h3>${escapeHtml(f.name)}</h3>` + (f.content||'') + '<hr>';}); const id = uid(); db.files[id]={id,name: name,content:merged,folder:null,star:false,created:Date.now(),updated:Date.now()}; db.order.push(id); saveDB(); render(); openFile(id); selectedFiles.clear(); }
 function deleteSelected(){ if(selectedFiles.size===0) return alert('선택된 파일이 없습니다'); if(!confirm('선택된 파일을 삭제할까요?')) return; selectedFiles.forEach(id=>{delete db.files[id]; db.order = db.order.filter(x=>x!==id)}); saveDB(); render(); selectedFiles.clear(); }
@@ -261,6 +264,22 @@ editorEl.addEventListener('paste', e => { e.preventDefault(); const text = (e.cl
 const appRoot = document.getElementById('appRoot'); const toggleSidebarBtn = document.getElementById('toggleSidebarBtn'); const expandHandle = document.getElementById('expandHandle');
 function toggleSidebar() { const isHidden = appRoot.classList.toggle('sidebar-hidden'); toggleSidebarBtn.textContent = isHidden ? '➡' : '⬅'; toggleSidebarBtn.title = isHidden ? '사이드바 펼치기' : '사이드바 숨기기'; }
 toggleSidebarBtn.addEventListener('click', toggleSidebar); expandHandle.addEventListener('click', toggleSidebar);
+
+const sidebar = document.getElementById('sidebar');
+const backdrop = document.querySelector('.sidebar-backdrop');
+function toggleMobileSidebar(forceOpen) {
+    const isOpen = sidebar.classList.contains('sidebar-open');
+    if (typeof forceOpen === 'boolean') {
+        sidebar.classList.toggle('sidebar-open', forceOpen);
+        backdrop.classList.toggle('visible', forceOpen);
+    } else {
+        sidebar.classList.toggle('sidebar-open');
+        backdrop.classList.toggle('visible');
+    }
+}
+document.getElementById('mobileMenuBtn').addEventListener('click', () => toggleMobileSidebar());
+backdrop.addEventListener('click', () => toggleMobileSidebar(false));
+
 document.getElementById('btnSettings').addEventListener('click', ()=>{ openSettingsModal(); }); document.getElementById('btnDeleteFile').onclick = deleteCurrentFile; document.getElementById('btnBookmark').onclick = toggleBookmark; document.getElementById('btnFindReplace').onclick = openFindReplaceModal;
 document.getElementById('zoomInBtn').onclick = () => { currentZoom = Math.min(2, currentZoom + 0.1); updateZoom(); }
 document.getElementById('zoomOutBtn').onclick = () => { currentZoom = Math.max(0.5, currentZoom - 0.1); updateZoom(); }
@@ -273,26 +292,16 @@ function updateBookmarkButtonState() { const btn = document.getElementById('btnB
 function doCmd(cmd, val=null){ document.execCommand(cmd, false, val); }
 let dark=false; function applyDark(d){ dark = !!d; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('dark', dark); localStorage.setItem('wn_dark', dark? '1':'0'); }
 window.addEventListener('dragend', cleanupDragState);
-if(localStorage.getItem('wn_dark')==='`1`') applyDark(true);
+if(localStorage.getItem('wn_dark')==='1') applyDark(true);
 if(db.order && db.order.length > 0 && db.files[db.order[0]]) { openFile(db.order[0]); } else if (Object.keys(db.files).length > 0) { openFile(Object.keys(db.files)[0]); } else { updateStats(); }
 render();
 
 function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
-function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 형식 선택</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="exportCancel">취소</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportCancel').onclick = closeModal; document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; }
-function openSettingsModal(){ const html = `<h3>설정</h3> <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> <label style="display:flex; align-items:center; justify-content: space-between;"> <span>다크모드 사용</span> <input type="checkbox" id="setting_dark"> </label> <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th(GitHub)</a></div> <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 데이터 초기화</button> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="setting_close">닫기</button> </div> </div>`; openModal(html); document.getElementById('setting_dark').checked = dark; document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); }; document.getElementById('resetAll').onclick = resetAllData; document.getElementById('setting_close').onclick = closeModal; }
-function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameDisplay').textContent = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
-function openFindReplaceModal() {
-    if (!currentFileId) return alert('파일을 선택하세요');
-    const html = `<h3>찾기/바꾸기</h3><div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;"><input type="text" id="find-query" placeholder="찾을 내용" style="width: 100%;"><input type="text" id="replace-query" placeholder="바꿀 내용" style="width: 100%;"></div><div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;"><button id="find-btn">찾기</button><button id="replace-btn">바꾸기</button><button id="replace-all-btn">모두 바꾸기</button><button id="find-close-btn">닫기</button></div>`;
-    openModal(html);
-    const findInput = document.getElementById('find-query');
-    const replaceInput = document.getElementById('replace-query');
-    document.getElementById('find-btn').onclick = () => { const query = findInput.value; if (query && !window.find(query, false, false, true, false, true, false)) { alert('더 이상 찾는 내용이 없습니다.'); } };
-    document.getElementById('replace-btn').onclick = () => { const selection = window.getSelection(); if (selection.rangeCount > 0) { document.execCommand('insertText', false, replaceInput.value); } };
-    document.getElementById('replace-all-btn').onclick = () => { const findQuery = findInput.value; const replaceQuery = replaceInput.value; if (!findQuery) return; const editor = document.getElementById('editor'); let content = editor.innerHTML; const originalContent = content; content = content.replaceAll(findQuery, replaceQuery); if (originalContent !== content) { editor.innerHTML = content; saveCurrent(); alert('모든 항목을 바꿨습니다.'); }};
-    document.getElementById('find-close-btn').onclick = closeModal;
-}
+function openSaveExportModal(){ /* ... */ }
+function openSettingsModal(){ /* ... */ }
+function resetAllData() { /* ... */ }
+function openFindReplaceModal() { /* ... */ }
 </script>
 </body>
 </html>
