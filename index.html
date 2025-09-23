@@ -94,11 +94,11 @@
   <div class="app" id="appRoot">
     <nav id="sidebar">
       <header>
-        <h2>Notepad v1.5.0</h2>
+        <h2>Notepad v1.1.7</h2>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="small" id="toggleSidebarBtn" title="사이드바 숨기기">⬅</button>
-          <button class="small" id="btnNewFile">+ 파일</button>
-          <button class="small" id="btnNewFolder">+ 폴더</button>
+          <button class="small" id="btnNewFile">+파일</button>
+          <button class="small" id="btnNewFolder">+폴더</button>
         </div>
       </header>
 
@@ -115,9 +115,8 @@
       </div>
 
       <div style="margin-top:12px">
-        <div class="section-title">임포트</div>
+        <div class="section-title">임포트(.txt/.docx/.pdf)</div>
         <input id="fileInput" type="file" multiple accept=".txt,.md,.html,.docx,.pdf" />
-        <div style="margin-top:6px;font-size:12px;color:var(--muted)">여러 파일 선택 가능 • .txt/.docx/.pdf 지원</div>
         <div class="section-title" style="margin-top:12px">병합 / 관리</div>
         <button id="btnMerge">선택 파일 병합</button>
         <button id="btnDeleteSelected">선택 삭제</button>
@@ -129,7 +128,7 @@
       <div class="toolbar">
         <div class="group" id="fileNameGroup">
           <h3 id="fileNameDisplay" style="margin: 0; font-size: 16px; font-weight: 600;"></h3>
-          <button id="btnRenameFile" class="btn-action">✏️ 이름 수정</button>
+          <button id="btnRenameFile" class="btn-action">변경</button>
         </div>
         <div class="group">
           <button onclick="doCmd('bold')"><b>B</b></button>
@@ -140,15 +139,15 @@
           <select id="fontSize" onchange="doCmd('fontSize', this.value)"><option value="3">기본</option><option value="4">크게</option><option value="5">더 크게</option></select>
         </div>
         <div class="group">
-            <button id="btnSave" class="btn-action">💾 저장</button>
-            <button id="btnExport" class="btn-action">📤 내보내기</button>
+            <button id="btnSave" class="btn-action">저장</button>
+            <button id="btnExport" class="btn-action">내보내기</button>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="autoSave"> 자동저장</label>
         </div>
         <div class="top-right-actions">
-          <button id="btnFindReplace" class="btn-action">🔍 찾기/바꾸기</button>
-          <button id="btnBookmark" class="btn-action">⭐ 북마크</button>
-          <button id="btnDeleteFile" class="btn-action">🗑️ 파일 삭제</button>
-          <button id="btnSettings">⚙️ 환경설정</button>
+          <button id="btnFindReplace" class="btn-action">찾기/바꾸기</button>
+          <button id="btnBookmark" class="btn-action">⭐</button>
+          <button id="btnDeleteFile" class="btn-action">삭제</button>
+          <button id="btnSettings">설정</button>
         </div>
       </div>
       <div class="editor-container">
@@ -210,7 +209,7 @@ function renderFolders(){
     const el = document.createElement('div'); el.className='folder'; el.draggable = true; el.dataset.id = f.id;
     if(currentFile && currentFile.folder === f.id) { el.classList.add('active-file'); }
     const toggleIcon = f._open ? '▾' : '▸';
-    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">📁 ${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
+    el.innerHTML = `<div style="flex:1;display:flex;align-items:center;gap:8px"><button onclick="toggleFolder('${f.id}')" style="width:24px;">${toggleIcon}</button><div style=\"flex:1;cursor:pointer\" onclick=\"openFolder('${f.id}')\">${escapeHtml(f.name)}</div></div><div style="display:flex;gap:6px"><button onclick="renameFolder('${f.id}')">✏️</button><button onclick="deleteFolder('${f.id}')">🗑️</button></div>`;
     el.ondragstart = (ev)=>onDragStart(ev, f.id, 'folder'); el.ondragover = allowDrop; el.ondragleave = (ev) => ev.currentTarget.classList.remove('drop-target'); el.ondrop = (ev) => { if (dragType === 'file') onFolderDrop(ev, f.id); else onDrop(ev, f.id); };
     const children = document.createElement('div'); children.className = 'folder-children'; children.id = 'children-'+f.id; children.style.display = f._open? 'block':'none';
     Object.values(db.files).forEach(file => { if(file.folder === f.id) { const fi = document.createElement('div'); fi.className='file-item draggable'; fi.dataset.id = file.id; if(file.id === currentFileId) { fi.classList.add('active-file'); } fi.innerHTML = renderFileItem(file); fi.onclick = (e) => { if(e.target.type !== 'checkbox') openFile(file.id); }; fi.draggable=true; fi.ondragstart=(ev)=>onDragStart(ev,file.id,'file'); children.appendChild(fi); }});
@@ -282,7 +281,7 @@ render();
 function openModal(contentHtml){ const root = document.getElementById('modalRoot'); root.innerHTML = `<div class="modal-backdrop"> <div class="modal">${contentHtml}</div> </div>`; root.style.display='block'; root.querySelector('.modal-backdrop').addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); }); }
 function closeModal(){ const root = document.getElementById('modalRoot'); root.innerHTML=''; root.style.display='none'; }
 function openSaveExportModal(){ if(!currentFileId) return alert('파일을 선택하세요'); const html = `<h3>내보내기 형식 선택</h3> <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"> <label><input type="checkbox" id="fmt_txt" checked> .txt</label> <label><input type="checkbox" id="fmt_docx"> .docx</label> <label><input type="checkbox" id="fmt_pdf"> .pdf</label> </div> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="exportCancel">취소</button> <button id="exportOk">내보내기</button> </div>`; openModal(html); document.getElementById('exportCancel').onclick = closeModal; document.getElementById('exportOk').onclick = ()=>{ const fmts = []; if(document.getElementById('fmt_txt').checked) fmts.push('txt'); if(document.getElementById('fmt_docx').checked) fmts.push('docx'); if(document.getElementById('fmt_pdf').checked) fmts.push('pdf'); if(fmts.length===0) return alert('하나 이상 선택하세요'); saveCurrent(); downloadSelectedFormats(fmts); closeModal(); }; }
-function openSettingsModal(){ const html = `<h3>환경설정</h3> <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> <label style="display:flex; align-items:center; justify-content: space-between;"> <span>다크모드 사용</span> <input type="checkbox" id="setting_dark"> </label> <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th (GitHub)</a></div> <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 데이터 초기화</button> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="setting_close">닫기</button> </div> </div>`; openModal(html); document.getElementById('setting_dark').checked = dark; document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); }; document.getElementById('resetAll').onclick = resetAllData; document.getElementById('setting_close').onclick = closeModal; }
+function openSettingsModal(){ const html = `<h3>설정</h3> <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px"> <label style="display:flex; align-items:center; justify-content: space-between;"> <span>다크모드 사용</span> <input type="checkbox" id="setting_dark"> </label> <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> <div style="font-size: 13px;">개발자: <a href="https://github.com/2000may24th" target="_blank" rel="noopener noreferrer">2000may24th(GitHub)</a></div> <button id="resetAll" style="background-color:#e53e3e; color:white; border:none;">전체 데이터 초기화</button> <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"> <button id="setting_close">닫기</button> </div> </div>`; openModal(html); document.getElementById('setting_dark').checked = dark; document.getElementById('setting_dark').onchange = (e)=>{ applyDark(e.target.checked); }; document.getElementById('resetAll').onclick = resetAllData; document.getElementById('setting_close').onclick = closeModal; }
 function resetAllData() { if (confirm('정말로 모든 파일과 폴더를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { db = {folders: {}, files: {}, order: [], folderOrder: []}; saveDB(); currentFileId = null; document.getElementById('editor').innerHTML = ''; document.getElementById('fileNameDisplay').textContent = ''; render(); updateStats(); closeModal(); alert('모든 데이터가 초기화되었습니다.'); }}
 function openFindReplaceModal() {
     if (!currentFileId) return alert('파일을 선택하세요');
