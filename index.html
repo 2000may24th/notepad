@@ -790,8 +790,8 @@ document.getElementById('btnSnippetHelp').addEventListener('click', () => { open
 document.getElementById('btnDeleteFile').onclick = deleteCurrentFile; 
 document.getElementById('btnBookmark').onclick = toggleBookmark; 
 document.getElementById('btnFindReplace').onclick = openFindReplaceModal;
-document.getElementById('zoomInBtn').onclick = () => { currentZoom = Math.min(2, currentZoom + 0.1); updateZoom(); }
-document.getElementById('zoomOutBtn').onclick = () => { currentZoom = Math.max(0.5, currentZoom - 0.1); updateZoom(); }
+document.getElementById('zoomInBtn').onclick = () => { currentZoom = Math.min(10, currentZoom + 0.2); updateZoom(); }
+document.getElementById('zoomOutBtn').onclick = () => { currentZoom = Math.max(0.2, currentZoom - 0.2); updateZoom(); }
 document.getElementById('fullscreenBtn').onclick = () => { const editorContainer = document.querySelector('.editor-container'); if (!document.fullscreenElement) { editorContainer.requestFullscreen(); } else { document.exitFullscreen(); } }
 document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement) { document.body.classList.add('editor-fullscreen'); } else { document.body.classList.remove('editor-fullscreen'); } });
 function updateZoom() { const newSize = BASE_FONT_SIZE * currentZoom; editorEl.style.fontSize = `${newSize}px`; document.getElementById('line-numbers').style.fontSize = `${newSize}px`; document.getElementById('zoomLevel').textContent = `${Math.round(currentZoom * 100)}%`; }
@@ -903,7 +903,7 @@ function openMainSettingsModal(){
         <input type="checkbox" id="setting_formatting"> 
       </label>
       <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
-        텍스트에 밑줄, 굵기, 색상 등을 적용하는 토글을 (비)활성화합니다.
+        텍스트에 밑줄, 색상 등을 적용하는 토글을 (비)활성화합니다.
       </div>
       
       <label style="display:flex; align-items:center; justify-content: space-between;"> 
@@ -926,7 +926,7 @@ function openMainSettingsModal(){
         <input type="checkbox" id="setting_calculator"> 
       </label>
       <div style="font-size: 11px; color: var(--muted); margin-top: -8px;">
-        간단한 사칙연산을 수행합니다. (예: =10*5= 입력 후 스페이스바)
+        간단한 사칙연산을 수행하는 스니펫 기능을 (비)활성화합니다. (예: =9*5=)
       </div>
 
       <hr style="border:none; border-top:1px solid #eee; margin: 4px 0;"> 
