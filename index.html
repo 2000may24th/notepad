@@ -216,16 +216,16 @@ let enableCalculator = true;
 let userSnippets = [];
 
 const presetSnippets = {
-  '/date/': { keys: ['/date/', '/날짜/'], desc: '오늘 날짜 (예: /date/)', value: () => { const d = new Date(); const year = d.getFullYear(); const month = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; }, enabled: true },
-  '/time/': { keys: ['/time/', '/시간/'], desc: '현재 시간 (예: /time/)', value: () => { const now = new Date(); return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'); }, enabled: true },
-  '/datetime/': { keys: ['/datetime/', '/일시/'], desc: '날짜 + 시간 (예: /datetime/)', value: () => { const now = new Date(); return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'); }, enabled: true },
-  '/weekday/': { keys: ['/weekday/', '/요일/'], desc: '요일 (예: /weekday/)', value: () => { const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; return weekdays[new Date().getDay()]; }, enabled: true },
-  '/month/': { keys: ['/month/'], desc: '현재 달 영문 이름 (예: /month/)', value: () => { const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']; return months[new Date().getMonth()]; }, enabled: true },
-  '/달/': { keys: ['/달/'], desc: '현재 달 한글 이름 (예: /달/)', value: () => { const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']; return months[new Date().getMonth()]; }, enabled: true },
-  '/line/': { keys: ['/line/', '/선/'], desc: '------------------- (구분선)', value: '----------------------------', enabled: true },
-  '/lines/': { keys: ['/lines/', '/긴선/'], desc: '==================== (구분선)', value: '====================', enabled: true },
+  '/date/': { keys: ['/date/', '/날짜/'], desc: '오늘 날짜 (예: 2025-05-24)', value: () => { const d = new Date(); const year = d.getFullYear(); const month = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; }, enabled: true },
+  '/time/': { keys: ['/time/', '/시간/'], desc: '현재 시간 (예: 22:30)', value: () => { const now = new Date(); return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'); }, enabled: true },
+  '/datetime/': { keys: ['/datetime/', '/일시/'], desc: '날짜 + 시간 (예: 2025-05-24 22:30)', value: () => { const now = new Date(); return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'); }, enabled: true },
+  '/weekday/': { keys: ['/weekday/', '/요일/'], desc: '요일 (예: Wed)', value: () => { const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; return weekdays[new Date().getDay()]; }, enabled: true },
+  '/month/': { keys: ['/month/'], desc: '현재 달 영문 이름 (예: May)', value: () => { const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']; return months[new Date().getMonth()]; }, enabled: true },
+  '/달/': { keys: ['/달/'], desc: '현재 달 한글 이름 (예: 5월)', value: () => { const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']; return months[new Date().getMonth()]; }, enabled: true },
+  '/line/': { keys: ['/line/', '/선/'], desc: '---------- (구분선)', value: '--------------------------------------------------', enabled: true },
+  '/lines/': { keys: ['/lines/', '/긴선/'], desc: '========== (구분선)', value: '==================================================', enabled: true },
   '/clip/': { keys: ['/clip/', '/복붙/'], desc: '현재 클립보드 내용 삽입', value: async () => { try { if (!navigator.clipboard || !navigator.clipboard.readText) { return '[클립보드 접근이 지원되지 않습니다]'; } const text = await navigator.clipboard.readText(); return text || '[클립보드가 비어있습니다]'; } catch (err) { console.error('클립보드 읽기 실패:', err); return '[클립보드를 읽어올 수 없습니다. 페이지를 클릭하는 등 상호작용 후 다시 시도해보세요.]'; } }, enabled: true },
-  '/rand/': { keys: ['/rand/', '/랜덤/'], desc: '무작위 숫자(예: 1~100)', value: () => Math.floor(Math.random() * 100) + 1, enabled: true },
+  '/rand/': { keys: ['/rand/', '/랜덤/'], desc: '무작위 숫자(1~100)', value: () => Math.floor(Math.random() * 100) + 1, enabled: true },
   '/lotto/': { keys: ['/lotto/', '/로또/'], desc: '로또 번호(1~45) 6개 랜덤 생성', value: () => { const numbers = new Set(); while (numbers.size < 6) { numbers.add(Math.floor(Math.random() * 45) + 1); } return Array.from(numbers).sort((a, b) => a - b).join(', '); }, enabled: true },
   '/w/': { keys: ['/w/', '/상/'], desc: '↑', value: '↑', enabled: true },
   '/s/': { keys: ['/s/', '/하/'], desc: '↓', value: '↓', enabled: true },
@@ -233,11 +233,11 @@ const presetSnippets = {
   '/d/': { keys: ['/d/', '/우/'], desc: '→', value: '→', enabled: true },
   '/ws/': { keys: ['/ws/', '/상하/'], desc: '↕', value: '↕', enabled: true },
   '/ad/': { keys: ['/ad/', '/좌우/'], desc: '↔', value: '↔', enabled: true },
-  '/yyyymmdd/': { keys: ['/yyyymmdd/'], desc: '년월일 8자리', value: () => { const d = new Date(); return d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); }, enabled: true },
-  '/yymmdd/': { keys: ['/yymmdd/'], desc: '년월일 6자리', value: () => { const d = new Date(); return d.getFullYear().toString().slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); }, enabled: true },
-  '/ddmmyy/': { keys: ['/ddmmyy/'], desc: '일월년 6자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString().slice(2); }, enabled: true },
-  '/ddmmyyyy/': { keys: ['/ddmmyyyy/'], desc: '일월년 8자리', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString(); }, enabled: true },
-  '/hhmmss/': { keys: ['/hhmmss/'], desc: '시분초 6자리', value: () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0'); }, enabled: true },
+  '/yyyymmdd/': { keys: ['/yyyymmdd/'], desc: '년월일(8자리)', value: () => { const d = new Date(); return d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); }, enabled: true },
+  '/yymmdd/': { keys: ['/yymmdd/'], desc: '년월일(6자리)', value: () => { const d = new Date(); return d.getFullYear().toString().slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); }, enabled: true },
+  '/ddmmyy/': { keys: ['/ddmmyy/'], desc: '일월년(6자리)', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString().slice(2); }, enabled: true },
+  '/ddmmyyyy/': { keys: ['/ddmmyyyy/'], desc: '일월년(8자리)', value: () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear().toString(); }, enabled: true },
+  '/hhmmss/': { keys: ['/hhmmss/'], desc: '시분초(6자리)', value: () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0'); }, enabled: true },
 };
 
 function loadDB(){ 
