@@ -159,7 +159,8 @@
           <button onmousedown="event.preventDefault()" onclick="doCmd('italic')"><i>I</i></button>
           <button onmousedown="event.preventDefault()" onclick="doCmd('underline')"><u>U</u></button>
           <button onmousedown="event.preventDefault()" onclick="doCmd('strikeThrough')">S</button>
-          <input type="color" id="colorPick" title="색상">
+          <!-- MODIFIED: Color input changed to a button for palette -->
+          <button onmousedown="event.preventDefault()" onclick="openColorPaletteModal()" title="글자색">🎨</button>
           <select id="fontSize">
             <option value="3">기본</option>
             <option value="4">크게</option>
@@ -604,11 +605,28 @@ function deleteSelected(){
     render();
 }
 
-function updateLineNumbers() { 
+// MODIFIED: Robust line counting for Enter and Shift+Enter
+function updateLineNumbers() {
   const editor = document.getElementById('editor');
   const lineNumbersEl = document.getElementById('line-numbers');
   
-  const lineCount = editor.childElementCount || 1;
+  let lineCount = 0;
+  const children = editor.childNodes;
+  for (let i = 0; i < children.length; i++) {
+      const node = children[i];
+      // Count DIV elements as lines
+      if (node.nodeName === 'DIV') {
+          // Inside a div, count <br> tags to handle shift+enter
+          const brs = node.getElementsByTagName('br').length;
+          // A div with no <br> or one <br> is one line. More <br>s add more lines.
+          lineCount += Math.max(1, brs);
+      }
+  }
+  
+  // If the editor is empty or has no divs, it's still one line
+  if (lineCount === 0) {
+      lineCount = 1;
+  }
 
   const numbersHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>'); 
   lineNumbersEl.innerHTML = numbersHTML; 
@@ -618,14 +636,12 @@ function updateLineNumbers() {
 
 function updateStats() { 
   const editor = document.getElementById('editor'); 
-  const text = editor.innerText || ''; 
+  // MODIFIED: Normalize newlines to fix character count issue
+  const text = (editor.innerText || '').replace(/\r\n/g, '\n');
   const html = editor.innerHTML || ''; 
   
   let chars = text.length;
-  if (editor.textContent.length === 0) {
-      chars = Math.max(0, chars - 1);
-  }
-
+  
   const charsNoSpace = text.replace(/\s/g, '').length;
   const words = (text.match(/\S+/g) || []).length;
   const paragraphs = (text.split('\n').filter(line => line.trim() !== '')).length;
@@ -673,17 +689,18 @@ const editorEl = document.getElementById('editor');
 editorEl.addEventListener('input', ()=>{ if(currentFileId) { db.files[currentFileId].updated=Date.now(); } updateStats(); });
 editorEl.addEventListener('scroll', () => { document.getElementById('line-numbers').scrollTop = editorEl.scrollTop; });
 
+// ADDED: Copy only plain text, removing all formatting
+editorEl.addEventListener('copy', e => {
+    e.preventDefault();
+    const textToCopy = window.getSelection().toString();
+    e.clipboardData.setData('text/plain', textToCopy);
+});
+
 editorEl.addEventListener('paste', e => { 
   if (!preservePasteFormat) {
     e.preventDefault(); 
     const text = (e.clipboardData || window.clipboardData).getData('text/plain'); 
     document.execCommand('insertText', false, text); 
-  }
-});
-
-document.getElementById('colorPick').addEventListener('input', (e) => {
-  if (enableFormatting) {
-    document.execCommand('foreColor', false, e.target.value);
   }
 });
 
@@ -837,6 +854,35 @@ function openSaveExportModal(){
     }; 
     document.getElementById('printBtn').onclick = ()=>{ printEditorContent(); closeModal(); }; 
 }
+
+// ADDED: Function to apply color from the palette modal
+function applyColor(color) {
+    doCmd('foreColor', color);
+    closeModal();
+}
+
+// ADDED: Function to open the new color palette modal
+function openColorPaletteModal() {
+    if (!enableFormatting) return;
+    const colors = [
+        '#000000', '#6c757d', '#dc3545', '#fd7e14', 
+        '#ffc107', '#28a745', '#007bff', '#6f42c1', 
+        '#ffffff', '#adb5bd'
+    ];
+    let swatches = colors.map(color =>
+        `<div onclick="applyColor('${color}')" style="width:30px; height:30px; background-color:${color}; cursor:pointer; border:1px solid #ccc; border-radius:50%;"></div>`
+    ).join('');
+    const html = `
+        <h3>색상 선택</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top:10px; justify-content: center;">
+            ${swatches}
+        </div>
+        <div style="margin-top:20px; text-align:right;">
+            <button onclick="applyColor('inherit')">기본값으로</button>
+        </div>`;
+    openModal(html);
+}
+
 
 function downloadSelectedFormats(fmts) {
   if (!currentFileId) return alert('파일을 선택하세요');
